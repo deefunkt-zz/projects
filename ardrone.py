@@ -1,11 +1,8 @@
 import rospy
-import roslib; roslib.load_manifest('ardrone_tutorials')
 import std_msgs.msg as stMsg
 import ardrone_autonomy.msg as dronemsgs
 import cv2
-import vision
-# import opencv2
-# import cv_bridge
+from cv_bridge import CvBridge, CvBridgeError
 # import sys
 from sensor_msgs.msg import Image
 from ardrone_autonomy.msg import Navdata
@@ -42,7 +39,7 @@ class BasicDroneController(object):
 
         # subscriber to the navdata, when a message is received call the fn self.GetNavdata
         self.subNavdata = rospy.Subscriber("/ardrone/navdata",dronemsgs.Navdata,self.GetNavdata)
-        self.pubReset = rospy.Publisher("/ardrone/reset",stMsg.Empty)
+        self.pubReset = rospy.Publisher("/ardrone/reset",stMsg.Empty,queue_size=3)
 
     # retrive and store data
     def GetNavdata(self,data):
@@ -54,18 +51,19 @@ class BasicDroneController(object):
 
 class image_converter:
     def __init__(self):
-        self.image_pub = rospy.Publisher("image_topic_2",Image)
+        self.image_pub = rospy.Publisher("image_topic_2",Image,queue_size=10)
         self.bridge = CvBridge()
-        self.image_sub = rospy.Subscriber("image_topic",Image,self.seeimage)
+        self.image_sub = rospy.Subscriber("/ardrone/image_raw",Image,self.seeimage)
 
     def seeimage(self,data):
         try:
             # calling inside cvbridge
-            cv_image = self.bridge.imgmsg_to_cv2(data,"bgr8")
+            cv_image = self.bridge.imgmsg_to_cv2(data,"bgr8") #rgb?
         except CvBridgeError as e:
             print(e)
 
         # store as a tuple? or the output tuple store individual outputs from the bridge?
+        #cv_image.shape returns width, height, and number of colours/channels
         (rows,cols,channels) = cv_image.shape
         if cols > 60 and rows > 60:   # check is valid image?
             # image,centre,radius,colour
