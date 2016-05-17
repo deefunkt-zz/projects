@@ -1,4 +1,5 @@
 import rospy
+import subprocess
 import std_msgs.msg as stMsg
 import ardrone_autonomy.msg as dronemsgs
 import cv2
@@ -18,13 +19,15 @@ from ardrone_autonomy.msg import Navdata
 
 
 def initdrone():
+    roscore = subprocess.Popen('roscore')
+    rospy.sleep(3)
     rospy.init_node('dronetest',anonymous=True)
-    ic = image_converter()
-    try:
-        rospy.spin()
-    except KeyboardInterrupt:
-        print "shutting down"
-    cv2.destroyAllWindows()
+    # ic = image_converter()
+    # try:
+    #     rospy.spin()
+    # except KeyboardInterrupt:
+    #     print "shutting down"
+    # cv2.destroyAllWindows()
 
     # rospy.Subscriber("/ardrone/navdata",dronemsgs.Navdata,callback)
     #rospy.spin()
@@ -36,26 +39,35 @@ class BasicDroneController(object):
     def __init__(self):
         self.status = -1
         self.Rotations = -1 # initialise?
+        self.markercount = -1
+        self.marker_orie = -1
+        self.marker_dis = -1
 
         # subscriber to the navdata, when a message is received call the fn self.GetNavdata
         self.subNavdata = rospy.Subscriber("/ardrone/navdata",dronemsgs.Navdata,self.GetNavdata)
         self.pubReset = rospy.Publisher("/ardrone/reset",stMsg.Empty,queue_size=3)
 
+
     # retrive and store data
     def GetNavdata(self,data):
         self.Rotations = [data.rotX, data.rotY, data.rotZ]
         self.status = data.state
-        rospy.loginfo(rospy.get_caller_id() + "I heard %s",self.Rotations)
+        self.markercount = data.tags_count
+        self.marker_orie = data.tags_orientation
+        self.marker_dis = data.tags_distance
+        # self.marker = {'cx'=,}
+
+        # rospy.loginfo(rospy.get_caller_id() + "I heard %s",self.Rotations)
         # return self.Rotations
 
 
-class image_converter:
+class image_converter():
     def __init__(self):
         self.image_pub = rospy.Publisher("image_topic_2",Image,queue_size=10)
         self.bridge = CvBridge()
         self.image_sub = rospy.Subscriber("/ardrone/image_raw",Image,self.seeimage)
 
-    def seeimage(self,data):
+    def seeimage(self,data,marker):
         try:
             # calling inside cvbridge
             cv_image = self.bridge.imgmsg_to_cv2(data,"bgr8") #rgb?
@@ -65,9 +77,9 @@ class image_converter:
         # store as a tuple? or the output tuple store individual outputs from the bridge?
         #cv_image.shape returns width, height, and number of colours/channels
         (rows,cols,channels) = cv_image.shape
-        if cols > 60 and rows > 60:   # check is valid image?
+        # if cols > 60 and rows > 60:   # check is valid image?
             # image,centre,radius,colour
-            cv2.circle(cv_image,(50,50),10,255)
+            # cv2.circle(cv_image,(50,50),10,255)
 
         cv2.imshow("Image window",cv_image)  # cv_image is a matrix
         cv2.waitKey(3) # wait three seconds?
@@ -78,12 +90,17 @@ class image_converter:
         except CvBridgeError as e:
             print(e)
 
-
+# def drawmarker(marker):
+#     cv2.circle(cv_image, (marker.cx, marker.cy), marker.rad, 255)
 
 
 if __name__ == '__main__':
     initdrone()
+    ic = image_converter()
     me = BasicDroneController()  # should automatically call GetNavdata when something in received in subscriber
+    while 1:
+        print me.marker_orie
+
    # i = 1
    # rospy.spin()
         # i += 1
