@@ -2,13 +2,15 @@ import rospy
 import roslib; roslib.load_manifest('ardrone_tutorials')
 import std_msgs.msg as stMsg
 import ardrone_autonomy.msg as dronemsgs
-import opencv2
-import cv_bridge
-import sys
-# from sensor_msgs.msg import Image
+import cv2
+import vision
+# import opencv2
+# import cv_bridge
+# import sys
+from sensor_msgs.msg import Image
 from ardrone_autonomy.msg import Navdata
 # from drone_status import DroneStatus
-from cv_bridge import CvBridge, CvBridgeError
+
 # something to to with assigning resources between GUI and ROS topics
 # from threading import Lock
 
@@ -20,6 +22,13 @@ from cv_bridge import CvBridge, CvBridgeError
 
 def initdrone():
     rospy.init_node('dronetest',anonymous=True)
+    ic = image_converter()
+    try:
+        rospy.spin()
+    except KeyboardInterrupt:
+        print "shutting down"
+    cv2.destroyAllWindows()
+
     # rospy.Subscriber("/ardrone/navdata",dronemsgs.Navdata,callback)
     #rospy.spin()
 
@@ -43,13 +52,42 @@ class BasicDroneController(object):
         # return self.Rotations
 
 
+class image_converter:
+    def __init__(self):
+        self.image_pub = rospy.Publisher("image_topic_2",Image)
+        self.bridge = CvBridge()
+        self.image_sub = rospy.Subscriber("image_topic",Image,self.seeimage)
+
+    def seeimage(self,data):
+        try:
+            # calling inside cvbridge
+            cv_image = self.bridge.imgmsg_to_cv2(data,"bgr8")
+        except CvBridgeError as e:
+            print(e)
+
+        # store as a tuple? or the output tuple store individual outputs from the bridge?
+        (rows,cols,channels) = cv_image.shape
+        if cols > 60 and rows > 60:   # check is valid image?
+            # image,centre,radius,colour
+            cv2.circle(cv_image,(50,50),10,255)
+
+        cv2.imshow("Image window",cv_image)  # cv_image is a matrix
+        cv2.waitKey(3) # wait three seconds?
+
+        try:
+            # the publisher node
+            self.image_pub.publish(self.bridge.cv2_to_imgmsg(cv_image,"bgr8"))
+        except CvBridgeError as e:
+            print(e)
+
+
 
 
 if __name__ == '__main__':
     initdrone()
     me = BasicDroneController()  # should automatically call GetNavdata when something in received in subscriber
-    i = 1
-    rospy.spin()
+   # i = 1
+   # rospy.spin()
         # i += 1
         # if i % 1000 == 0:
         # print me.Rotations
