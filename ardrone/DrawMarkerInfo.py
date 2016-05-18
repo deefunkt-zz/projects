@@ -4,6 +4,7 @@ import std_msgs.msg as stMsg
 import ardrone_autonomy.msg as dronemsgs
 import cv2
 from cv_bridge import CvBridge, CvBridgeError
+import math
 # import sys
 # import sensor_msgs.msg
 from sensor_msgs.msg import Image
@@ -44,6 +45,7 @@ class BasicDroneController(object):
         if self.markercount == 1:
             self.marker.cx = data.tags_xc[0]
             self.marker.cy = data.tags_yc[0]
+            print (self.marker.cx ,self.marker.cy)
             self.marker.width = data.tags_width[0]
             self.marker.height = data.tags_height[0]
             # self.marker = {'cx': data.tags_xc[0], 'cy' : data.tags_yc[0], 'width' : data.tags_width[0], 'height' : data.tags_height[0]}
@@ -65,28 +67,7 @@ class createrect():
 
 
 
-class image_converter():
-    def __init__(self):
-        # self.image_pub = rospy.Publisher("image_topic_2",Image,queue_size=10)
-        self.bridge = CvBridge()
-        # self.image_sub = rospy.Subscriber("/ardrone/image_raw",Image,seeimage)
-        # self.camerainfo = rospy.Subscriber("/ardrone/camera_info/ardone_front",sensor_msgs.msg.CameraInfo)
-        self.cv_image = Image # need to be intialised differently?
-    def convert(self,data):
-        try:
-            cv_image = self.bridge.imgmsg_to_cv2(data,"bgr8") #rgb
-        except CvBridgeError as e:
-            print(e)
-        # cv2.imshow("Image window",cv_image)
-        # cv2.waitKey(3)
-        self.cv_image = cv_image
 
-        # store as a tuple? or the output tuple store individual outputs from the bridge?
-        #cv_image.shape returns width, height, and number of colours/channels
-
-        # if cols > 60 and rows > 60:   # check is valid image?
-            # image,centre,radius,colour
-            # cv2.circle(cv_image,(50,50),10,255)
 
 def drawmarker(rows,cols,marker):
     # pt1 top left, pt2 bottom right
@@ -99,14 +80,14 @@ def drawmarker(rows,cols,marker):
         # pt1y = marker.cy*cols/1000 + marker.height*cols/(1000*2)
         # pt2x = marker.cx*rows/1000 + marker.width*rows/(1000*2)
         # pt2y = marker.cy*cols/1000 - marker.height*cols/(1000*2)
-    # pt1x = marker.cx*cols/1000 - marker.width*cols/(1000)
-    # pt1y = marker.cy*rows/1000 + marker.height*rows/(1000)
-    # pt2x = marker.cx*cols/1000 + marker.width*cols/(1000)
-    # pt2y = marker.cy*rows/1000 - marker.height*rows/(1000)
+    pt1x = marker.cx*cols/1000 - marker.width*cols/(1000)
+    pt1y = marker.cy*rows/1000 + marker.height*rows/(1000)
+    pt2x = marker.cx*cols/1000 + marker.width*cols/(1000)
+    pt2y = marker.cy*rows/1000 - marker.height*rows/(1000)
     rect = createrect()
     rect.pt1 = (pt1x,pt1y)
     rect.pt2 = (pt2x,pt2y)
-    rect.center = (marker.cx*cols/1000,marker.cy*rows/1000)
+    rect.center = (marker.cx*cols/1000,marker.cy*rows/900)
     return rect
 
 def seeimage(ros_image,marker):
@@ -123,9 +104,20 @@ def seeimage(ros_image,marker):
         # cv2.rectangle(cv_image,rect.pt1,rect.pt2,colour,3)
         # cv2.circle(cv_image,rect.center,3,colour)
 
-        cv2.circle(cv_image,(marker.cx*640/1000,marker.cy*360/1000),3,colour)
+        if marker.cy < 180:
+            cyedit = (180-marker.cy)*180/135
+            cyedit = cyedit-135
+        else:
+            cyedit = (marker.cy-180)*180/135
+            cyedit = cyedit + 135
+        # else
+        #     cyedit = (marker.cy-180)
+
+        cv2.circle(cv_image,(marker.cx*640/1000,cyedit*360/1000),3,colour)
+        cv2.circle(cv_image,(0,0),3,(0,255,0))
+        cv2.circle(cv_image,(640,360),3,(0,0,255))
         cv2.imshow("Image window", cv_image)  # cv_image is a matrix
-        cv2.waitKey(3)
+        cv2.waitKey(1)
     # cv2.waitKey(3) # wait three seconds?
 
 
@@ -134,8 +126,6 @@ if __name__ == '__main__':
     me = BasicDroneController()  # should automatically call GetNavdata when something in received in subscriber
 
     image_sub = rospy.Subscriber("/ardrone/image_raw",Image,seeimage,me.marker)
-    # camerainfo = rospy.Subscriber("/ardrone/camera_info/ardone_front",sensor_msgs.msg.CameraInfo)
-    # ic = image_converter()
 
     while 1:
         pass
