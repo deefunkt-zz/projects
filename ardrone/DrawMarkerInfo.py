@@ -58,8 +58,9 @@ class createmarker():
 
 class createrect():
     def __init__(self):
-        pt1 = [-1, -1]
-        pt2 = [-1, -1]
+        pt1 = -1
+        pt2 = -1
+        center = -1
 
 
 
@@ -76,8 +77,8 @@ class image_converter():
             cv_image = self.bridge.imgmsg_to_cv2(data,"bgr8") #rgb?
         except CvBridgeError as e:
             print(e)
-        cv2.imshow("Image window",cv_image)
-        cv2.waitKey(3)
+        # cv2.imshow("Image window",cv_image)
+        # cv2.waitKey(3)
         self.cv_image = cv_image
 
         # store as a tuple? or the output tuple store individual outputs from the bridge?
@@ -90,27 +91,40 @@ class image_converter():
 def drawmarker(rows,cols,marker):
     # pt1 top left, pt2 bottom right
     #
-    pt1x = marker.cx/10*cols - marker.width/(10*2)*cols
-    pt1y = marker.cy/10*rows + marker.height/(10*2)*rows
-    pt2x = marker.cx/10*cols + marker.width/(10*2)*cols
-    pt2y = marker.cy/10*rows - marker.height/(10*2)*rows
+    # pt1x = marker.cx*cols/1000 - marker.width*cols/(1000*2)
+    # pt1y = marker.cy*rows/1000 + marker.height*rows/(1000*2)
+    # pt2x = marker.cx*cols/1000 + marker.width*cols/(1000*2)
+    # pt2y = marker.cy*rows/1000 - marker.height*rows/(1000*2)
+    # pt1x = marker.cx*rows/1000 - marker.width*rows/(1000*2)
+    # pt1y = marker.cy*cols/1000 + marker.height*cols/(1000*2)
+    # pt2x = marker.cx*rows/1000 + marker.width*rows/(1000*2)
+    # pt2y = marker.cy*cols/1000 - marker.height*cols/(1000*2)
+    pt1x = marker.cx*cols/1000 - marker.width*cols/(1000)
+    pt1y = marker.cy*rows/1000 + marker.height*rows/(1000)
+    pt2x = marker.cx*cols/1000 + marker.width*cols/(1000)
+    pt2y = marker.cy*rows/1000 - marker.height*rows/(1000)
     rect = createrect()
-    rect.pt1 = [pt1x,pt1y]
-    rect.pt2 = [pt2x,pt2y]
+    rect.pt1 = (pt1x,pt1y)
+    rect.pt2 = (pt2x,pt2y)
+    rect.center = (marker.cx*cols/1000,marker.cy*rows/1000)
     return rect
 
 def seeimage(cv_image,marker):
     if me.markercount == 1:
         (rows,cols,channels) = cv_image.shape
         rect = drawmarker(rows,cols,marker)
-        cv2.rectangle(cv_image,rect.pt1,rect.pt2,255)
+        colour = (255,0,0)
+        cv2.rectangle(cv_image,rect.pt1,rect.pt2,colour,3)
+        cv2.circle(cv_image,rect.center,3,colour)
         cv2.imshow("Image window", cv_image)  # cv_image is a matrix
+        cv2.waitKey(300000)
     # cv2.waitKey(3) # wait three seconds?
 
 
 
 if __name__ == '__main__':
     initdrone()
+
     # camerainfo = rospy.Subscriber("/ardrone/camera_info/ardone_front",sensor_msgs.msg.CameraInfo)
     ic = image_converter()
     me = BasicDroneController()  # should automatically call GetNavdata when something in received in subscriber
