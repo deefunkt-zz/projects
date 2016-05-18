@@ -2,6 +2,7 @@
 import rospy
 import subprocess
 import std_msgs.msg as stMsg
+from geometry_msgs.msg import Twist
 import ardrone_autonomy.msg as dronemsgs
 import cv2
 import shlex
@@ -85,27 +86,39 @@ class image_converter:
         cv2.imshow("Image window",cv_image)  # cv_image is a matrix
         cv2.waitKey(3) # wait three seconds?
 
-        try:
-            # the publisher node
-            self.image_pub.publish(self.bridge.cv2_to_imgmsg(cv_image,"bgr8"))
-        except CvBridgeError as e:
-            print(e)
+        # try:
+        #     # the publisher node
+        #     #self.image_pub.publish(self.bridge.cv2_to_imgmsg(cv_image,"bgr8"))
+        # except CvBridgeError as e:
+        #     print(e)
 
 
 if __name__ == '__main__':
     initdrone()
     me = BasicDroneController()  # should automatically call GetNavdata when something in received in subscriber
     ic = image_converter()
-    subNavdata = rospy.Subscriber("/ardrone/navdata", dronemsgs.Navdata, me.GetNavdata)
+    subNavdata = rospy.Subscriber('/ardrone/navdata', dronemsgs.Navdata, me.GetNavdata)
     image_sub = rospy.Subscriber("/ardrone/image_raw", Image, ic.seeimage)
-    pubReset = rospy.Publisher("/ardrone/reset", stMsg.Empty,queue_size=10)
-    pubTakeoff = rospy.Publisher("/ardrone/takeoff", stMsg.Empty,queue_size=10)
-    pubLand = rospy.Publisher("/ardrone/land", stMsg.Empty,queue_size=10)
+    pubReset = rospy.Publisher("/ardrone/reset", stMsg.Empty, queue_size=1)
+    pubTakeoff = rospy.Publisher("/ardrone/takeoff", stMsg.Empty, queue_size=1)
+    pubLand = rospy.Publisher("/ardrone/land", stMsg.Empty,queue_size=1)
+    pubCmd = rospy.Publisher("/cmd_vel", Twist, queue_size = 6)
+    EmptyMessage = stMsg.Empty()
+    cmd = Twist()
+    cmd.linear.z = 0
+    cmd.linear.x = 0.1
+    cmd.linear.y = 0
+    cmd.angular.x = 0
+    cmd.angular.y = 0
+    cmd.angular.z = 0
     five_seconds = rospy.Duration(5)
+    two_seconds = rospy.Duration(2)
     rospy.sleep(five_seconds)
-    pubTakeoff.publish(stMsg.Empty)
+    pubTakeoff.publish(EmptyMessage)
     rospy.sleep(five_seconds)
-    pubLand.publish(stMsg.Empty())
+    pubCmd.publish(cmd)
+    rospy.sleep(two_seconds)
+    pubLand.publish(EmptyMessage)
 
     while not rospy.is_shutdown():
         rospy.spin()
