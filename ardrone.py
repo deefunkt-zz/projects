@@ -1,14 +1,21 @@
+#!/bin/env python
 import rospy
 import subprocess
 import std_msgs.msg as stMsg
 import ardrone_autonomy.msg as dronemsgs
 import cv2
+import shlex
 from cv_bridge import CvBridge, CvBridgeError
 # import sys
 from sensor_msgs.msg import Image
 from ardrone_autonomy.msg import Navdata
-# from drone_status import DroneStatus
 
+
+# todo. capture a few seconds worth of Navdata for later analysis
+# todo. track marker over multiple images
+# todo. move ardrone via python and GeometryTwist Messages
+# todo. implement control system to track marker in middle of camera image
+# todo.
 # something to to with assigning resources between GUI and ROS topics
 # from threading import Lock
 
@@ -19,23 +26,20 @@ from ardrone_autonomy.msg import Navdata
 
 
 def initdrone():
-    roscore = subprocess.Popen('roscore')
-    rospy.sleep(3)
+    try:
+        launchcommand = shlex.split('roslaunch ardrone_autonomy ardrone.launch')
+        roscore = subprocess.Popen(launchcommand)
+        # rospy.sleep(3)
+        # ardronedriver = subprocess.Popen('rosrun ardrone_autonomy ardrone_driver')
+
+        rospy.sleep(10.)
+    except ValueError:
+        print('invalid')
+
     rospy.init_node('dronetest',anonymous=True)
-    # ic = image_converter()
-    # try:
-    #     rospy.spin()
-    # except KeyboardInterrupt:
-    #     print "shutting down"
-    # cv2.destroyAllWindows()
 
-    # rospy.Subscriber("/ardrone/navdata",dronemsgs.Navdata,callback)
-    #rospy.spin()
 
-# def callback(data):
-#     rospy.loginfo(rospy.get_caller_id() + "I heard %s",data.data)
-
-class BasicDroneController(object):
+class BasicDroneController:
     def __init__(self):
         self.status = -1
         self.Rotations = -1 # initialise?
@@ -44,42 +48,39 @@ class BasicDroneController(object):
         self.marker_dis = -1
 
         # subscriber to the navdata, when a message is received call the fn self.GetNavdata
-        self.subNavdata = rospy.Subscriber("/ardrone/navdata",dronemsgs.Navdata,self.GetNavdata)
-        self.pubReset = rospy.Publisher("/ardrone/reset",stMsg.Empty,queue_size=3)
+        # self.subNavdata = rospy.Subscriber("/ardrone/navdata",dronemsgs.Navdata,self.GetNavdata)
+        # self.pubReset = rospy.Publisher("/ardrone/reset",stMsg.Empty,queue_size=3)
+        # self.pubTakeoff = rospy.Publisher("/ardrone/takeoff",stMsg.Empty,queue_size=5)
+        # self.pubLand = rospy.Publisher("/ardrone/land",stMsg.Empty,queue_size=5)
 
 
     # retrive and store data
     def GetNavdata(self,data):
         self.Rotations = [data.rotX, data.rotY, data.rotZ]
         self.status = data.state
-        self.markercount = data.tags_count
-        self.marker_orie = data.tags_orientation
-        self.marker_dis = data.tags_distance
-        # self.marker = {'cx'=,}
+        if data.tags_count is 1:
+            self.markercount = data.tags_count
+            self.marker_orie = data.tags_orientation
+            self.taglocation = [data.tags_xc[0], data.tags_yc[0]]
+            self.marker_dis = data.tags_distance #in cm
+            print('[xc, yc] = ' + str(self.taglocation) + '\n')
 
-        # rospy.loginfo(rospy.get_caller_id() + "I heard %s",self.Rotations)
-        # return self.Rotations
 
 
-class image_converter():
+class image_converter:
     def __init__(self):
-        self.image_pub = rospy.Publisher("image_topic_2",Image,queue_size=10)
+        # self.image_pub = rospy.Publisher("image_topic_2",Image,queue_size=10)
         self.bridge = CvBridge()
-        self.image_sub = rospy.Subscriber("/ardrone/image_raw",Image,self.seeimage)
+        # self.image_sub = rospy.Subscriber("/ardrone/image_raw",Image,self.seeimage)
 
-    def seeimage(self,data,marker):
+
+
+    def seeimage(self,data):
         try:
             # calling inside cvbridge
             cv_image = self.bridge.imgmsg_to_cv2(data,"bgr8") #rgb?
         except CvBridgeError as e:
             print(e)
-
-        # store as a tuple? or the output tuple store individual outputs from the bridge?
-        #cv_image.shape returns width, height, and number of colours/channels
-        (rows,cols,channels) = cv_image.shape
-        # if cols > 60 and rows > 60:   # check is valid image?
-            # image,centre,radius,colour
-            # cv2.circle(cv_image,(50,50),10,255)
 
         cv2.imshow("Image window",cv_image)  # cv_image is a matrix
         cv2.waitKey(3) # wait three seconds?
@@ -90,20 +91,21 @@ class image_converter():
         except CvBridgeError as e:
             print(e)
 
-# def drawmarker(marker):
-#     cv2.circle(cv_image, (marker.cx, marker.cy), marker.rad, 255)
-
 
 if __name__ == '__main__':
     initdrone()
-    ic = image_converter()
     me = BasicDroneController()  # should automatically call GetNavdata when something in received in subscriber
-    while 1:
-        print me.marker_orie
+    ic = image_converter()
+    subNavdata = rospy.Subscriber("/ardrone/navdata", dronemsgs.Navdata, me.GetNavdata)
+    image_sub = rospy.Subscriber("/ardrone/image_raw", Image, ic.seeimage)
+    pubReset = rospy.Publisher("/ardrone/reset", stMsg.Empty,queue_size=10)
+    pubTakeoff = rospy.Publisher("/ardrone/takeoff", stMsg.Empty,queue_size=10)
+    pubLand = rospy.Publisher("/ardrone/land", stMsg.Empty,queue_size=10)
+    five_seconds = rospy.Duration(5)
+    rospy.sleep(five_seconds)
+    pubTakeoff.publish(stMsg.Empty)
+    rospy.sleep(five_seconds)
+    pubLand.publish(stMsg.Empty())
 
-   # i = 1
-   # rospy.spin()
-        # i += 1
-        # if i % 1000 == 0:
-        # print me.Rotations
-
+    while not rospy.is_shutdown():
+        rospy.spin()
