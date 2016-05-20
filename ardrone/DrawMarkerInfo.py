@@ -14,13 +14,18 @@ from sensor_msgs.msg import Image
 # CONNECTION_CHECK_PERIOD = 250 #ms
 # GUI_UPDATE_PERIOD = 20 #ms
 
-
+# constants for rectangle drawing
+roundel_ratio = 0.639  # assume in center but actually not (long side/total)
+roundel_alpha = 0.5051   # in rad = 28.94 degrees (long)
+roundel_beta = math.pi - 0.7736  # in rad = 180- 44.32 degrees (short)
+r2d = 180/math.pi
+d2r = math.pi/180
 
 def initdrone():
     # roscore = subprocess.Popen('roscore')
     # rospy.sleep(3)
     rospy.init_node('dronetest',anonymous=True)
-
+    cv2.destroyAllWindows()
 
 class BasicDroneController(object):
     def __init__(self):
@@ -45,7 +50,9 @@ class BasicDroneController(object):
         if self.markercount == 1:
             self.marker.cx = data.tags_xc[0]
             self.marker.cy = data.tags_yc[0]
-            print (self.marker.cx ,self.marker.cy)
+            self.marker.theta = -data.tags_orientation[0]
+            # print(self.marker.theta)
+            # print (self.marker.cx ,self.marker.cy)
             self.marker.width = data.tags_width[0]
             self.marker.height = data.tags_height[0]
             # self.marker = {'cx': data.tags_xc[0], 'cy' : data.tags_yc[0], 'width' : data.tags_width[0], 'height' : data.tags_height[0]}
@@ -57,11 +64,14 @@ class createmarker():
         cy = -1
         width = -1
         height = -1
+        theta = -1.0
 
 class createrect():
     def __init__(self):
         pt1 = -1
         pt2 = -1
+        pt3 = -1
+        pt4 = -1
         center = -1
 
 
@@ -70,24 +80,37 @@ class createrect():
 
 
 def drawmarker(rows,cols,marker):
-    # pt1 top left, pt2 bottom right
+    # assume height and width doesnt need to /1000* cols||rows
+    Hlong = math.sqrt((marker.width*roundel_ratio)**2 + (float(marker.height)/2)**2)
+    Hshort = math.sqrt((marker.width*(1-roundel_ratio))**2+(float(marker.height)/2)**2)
+    # width = marker.width*cols/(1000) # not valid for orientated
+    # height= marker.height*rows/(1000)
+    # pt1 top right, pt2 top left, pt3 bottom left, pt4 bottom right
+
+    # pt1x = marker.cx*cols/1000 - width
+    # pt1y = marker.cy*rows/1000 + height
     #
-        # pt1x = marker.cx*cols/1000 - marker.width*cols/(1000*2)
-        # pt1y = marker.cy*rows/1000 + marker.height*rows/(1000*2)
-        # pt2x = marker.cx*cols/1000 + marker.width*cols/(1000*2)
-        # pt2y = marker.cy*rows/1000 - marker.height*rows/(1000*2)
-        # pt1x = marker.cx*rows/1000 - marker.width*rows/(1000*2)
-        # pt1y = marker.cy*cols/1000 + marker.height*cols/(1000*2)
-        # pt2x = marker.cx*rows/1000 + marker.width*rows/(1000*2)
-        # pt2y = marker.cy*cols/1000 - marker.height*cols/(1000*2)
-    pt1x = marker.cx*cols/1000 - marker.width*cols/(1000)
-    pt1y = marker.cy*rows/1000 + marker.height*rows/(1000)
-    pt2x = marker.cx*cols/1000 + marker.width*cols/(1000)
-    pt2y = marker.cy*rows/1000 - marker.height*rows/(1000)
+    # pt2x = marker.cx*cols/1000 + width
+    # pt2y = marker.cy*rows/1000 - height
+
+    pt1x = (Hlong*math.cos(marker.theta*d2r+roundel_alpha)) + (float(marker.cx)/1000)*cols
+    pt1y = (Hlong*math.sin(marker.theta*d2r+roundel_alpha)) + (float(marker.cy)/1000)*rows
+
+    pt2x = (Hshort*math.cos(marker.theta*d2r+roundel_beta)) + (float(marker.cx)/1000)*cols
+    pt2y = (Hshort*math.sin(marker.theta*d2r+roundel_beta)) + (float(marker.cy)/1000)*rows
+
+    pt3x = (Hshort*math.cos(marker.theta*d2r-roundel_beta)) + (float(marker.cx)/1000)*cols
+    pt3y = (Hshort*math.sin(marker.theta*d2r-roundel_beta)) + (float(marker.cy)/1000)*rows
+
+    pt4x = (Hlong*math.cos(marker.theta*d2r-roundel_alpha)) + (float(marker.cx)/1000)*cols
+    pt4y = (Hlong*math.sin(marker.theta*d2r-roundel_alpha)) + (float(marker.cy)/1000)*rows
+
     rect = createrect()
-    rect.pt1 = (pt1x,pt1y)
-    rect.pt2 = (pt2x,pt2y)
-    rect.center = (marker.cx*cols/1000,marker.cy*rows/900)
+    rect.pt1 = (int(pt1x),int(pt1y))
+    rect.pt2 = (int(pt2x),int(pt2y))
+    rect.pt3 = (int(pt3x),int(pt3y))
+    rect.pt4 = (int(pt4x),int(pt4y))
+    rect.center = (marker.cx*cols/1000,marker.cy*rows/1000)
     return rect
 
 def seeimage(ros_image,marker):
@@ -98,26 +121,41 @@ def seeimage(ros_image,marker):
         print(e)
 
     if me.markercount == 1:
-        # (rows,cols,channels) = cv_image.shape
+        (rows,cols,channels) = cv_image.shape
         # rect = drawmarker(rows,cols,marker)
         colour = (255,0,0)
         # cv2.rectangle(cv_image,rect.pt1,rect.pt2,colour,3)
         # cv2.circle(cv_image,rect.center,3,colour)
+        ################ EDITED Y VALUE
+        # if marker.cy < 180:
+        #     cyedit = (180-marker.cy)*180/135
+        #     cyedit = cyedit-135
+        # else:
+        #     cyedit = (marker.cy-180)*180/135
+        #     cyedit = cyedit + 135
+        #
+        # marker.cy = cyedit
+        rect = drawmarker(rows,cols,marker)
+        # not rotated
+        # cv2.rectangle(cv_image,rect.pt1,rect.pt2,colour,3)
+        # rotated rectangle
+        cv2.line(cv_image,rect.pt1,rect.pt2,colour)
+        cv2.line(cv_image,rect.pt2,rect.pt3,colour)
+        cv2.line(cv_image,rect.pt3,rect.pt4,colour)
+        cv2.line(cv_image,rect.pt4,rect.pt1,colour)
 
-        if marker.cy < 180:
-            cyedit = (180-marker.cy)*180/135
-            cyedit = cyedit-135
-        else:
-            cyedit = (marker.cy-180)*180/135
-            cyedit = cyedit + 135
-        # else
-        #     cyedit = (marker.cy-180)
 
-        cv2.circle(cv_image,(marker.cx*640/1000,cyedit*360/1000),3,colour)
-        cv2.circle(cv_image,(0,0),3,(0,255,0))
-        cv2.circle(cv_image,(640,360),3,(0,0,255))
+        cv2.circle(cv_image,(marker.cx*cols/1000,marker.cy*rows/1000),3,colour)
+
         cv2.imshow("Image window", cv_image)  # cv_image is a matrix
-        cv2.waitKey(1)
+        cv2.waitKey(3)
+        # cv2.destroyAllWindows()
+        # k = cv2.waitKey(3)  & 0xFF   # press a key in that time to keep it? (64 bit machine?)
+        # if k == 27:         # wait for ESC key to exit
+        #     cv2.destroyAllWindows()
+        # else: # save and destroy
+        #     cv2.imwrite('TestingRoundel.png',cv_image)
+        #     cv2.destroyAllWindows()
     # cv2.waitKey(3) # wait three seconds?
 
 
@@ -128,7 +166,9 @@ if __name__ == '__main__':
     image_sub = rospy.Subscriber("/ardrone/image_raw",Image,seeimage,me.marker)
 
     while 1:
+        # try:
         pass
+
         # if me.markercount == 1:
         #     seeimage(ic.cv_image, me.marker)
 
