@@ -9,16 +9,24 @@ import shlex
 import math
 from cv_bridge import CvBridge, CvBridgeError
 import numpy as np
+
+
+
+
+
 # import sys
 from sensor_msgs.msg import Image
 from ardrone_autonomy.msg import Navdata
 
 
-# todo. capture a few seconds worth of Navdata for later analysis
-# todo. track marker over multiple images
-# todo. move ardrone via python and GeometryTwist Messages
+#
+# done. track marker over multiple images
+# done. move ardrone via python and GeometryTwist Messages
+# done. recieve all telemetry using appropriate publisher/subscriber pairs
 # todo. implement control system to track marker in middle of camera image
-# todo.
+# SUB   todo. investigate the reference frames of the quadcotper thoroughly
+# SUB   todo. fix autohovering behaviour which causes drone to interpret moving marker as a moving ground surface
+# todo. capture a few seconds worth of Navdata for later analysis
 
 # constants for rectangle drawing
 roundel_ratio = 0.639  # assume in center but actually not (long side/total)
@@ -26,6 +34,8 @@ roundel_alpha = 0.5051   # in rad = 28.94 degrees (long)
 roundel_beta = math.pi - 0.7736  # in rad = 180- 44.32 degrees (short)
 r2d = 180/math.pi
 d2r = math.pi/180
+
+
 
 
 def initdrone():
@@ -40,6 +50,7 @@ def initdrone():
         print('invalid launch')
 
     rospy.init_node('dronetest',anonymous=True)
+
 
 
 class BasicDroneController(object):
@@ -171,14 +182,17 @@ def seeimage(ros_image,marker):
 
 
 def Pcontrol(setpos,cpos,ctime,ppos,ptime):
-    vmaxP = 0.08
-    vmaxD = 0.05
-    maxdev = np.array([500, 500])
+    vmaxP = 0.4
+    vmaxD = 0
+    maxdev = np.array([500., 500.])
     dt = (ctime - ptime)/1000000
     derror = ((setpos - cpos) - (setpos - ppos))/dt
-    # error = desired - current
-    # output = -K*error
-    output = -vmaxP*(setpos-cpos)/maxdev + vmaxD*derror/maxdev
+    error = (setpos-cpos)/maxdev
+    if np.amax(abs(error)) < 0.1:
+        output = np.array([0,0])
+    else:
+        # output = -K*error
+        output = -vmaxP*error + vmaxD*derror/maxdev
     return output
 
 
@@ -275,7 +289,7 @@ class twistMatrix:
         cmd.angular.z = 0
         self.movePub.publish(cmd)
 
-    def hover(self):
+    def autoHover(self):
         cmd = Twist()
         cmd.linear.z = 0
         cmd.linear.x = 0
@@ -285,21 +299,40 @@ class twistMatrix:
         cmd.angular.z = 0
         self.movePub.publish(cmd)
 
-    def xyinput(self, vec):
+    def hoverNoAuto(self):
         cmd = Twist()
         cmd.linear.z = 0
-        cmd.linear.x = -vec[1]
-        cmd.linear.y = -vec[0]-(0.4*vec[1])
-        cmd.angular.x = 0
-        cmd.angular.y = 0
+        cmd.linear.x = 0
+        cmd.linear.y = 0
+        cmd.angular.x = 0.1
+        cmd.angular.y = 0.2
         cmd.angular.z = 0
         self.movePub.publish(cmd)
 
+    def xyinput(self, vec):
+        cmd = Twist()
+        cmd.linear.z = 0
+        # cmd.linear.x = -vec[1]
+        # cmd.linear.y = -vec[0]-(0.4*vec[1])
+        cmd.angular.x = 0
+        cmd.angular.y = 0
+        cmd.angular.z = 0
+        [cmd.linear.x, cmd.linear.y] = self.transform2DroneRef(np.array(vec))
+        self.movePub.publish(cmd)
+
     def land(self, landPub):
-        self.hover()
+        self.autoHover()
         rospy.sleep(rospy.Duration(0.5))
         landPub.publish(EmptyMessage)
 
+    def takeoff(self, takeoffPub):
+        rospy.sleep(rospy.Duration(2))
+        takeoffPub.publish(EmptyMessage)
+
+    def transform2DroneRef(self, vectorXY):
+        vectorXYdrone= (1/(math.sqrt(2)))*np.dot(np.array([[1, -1], [-1, -1]]), np.transpose(vectorXY))
+        print "vectorXYdrone is :" + str(vectorXYdrone)
+        return vectorXYdrone
 
 if __name__ == '__main__':
     initdrone()
@@ -319,7 +352,7 @@ if __name__ == '__main__':
 
 
 ##### control sequence
-    rospy.sleep(five_seconds)
+    rospy.sleep(two_seconds)
     pubTakeoff.publish(EmptyMessage)
     rospy.sleep(two_seconds)
     control = twistMatrix(pubCmd)
@@ -330,11 +363,14 @@ if __name__ == '__main__':
     # control.moveBack()
     # rospy.sleep(rospy.Duration(2))
     # control.land(pubLand)
+    # control.autoHover()
+    # rospy.sleep(rospy.Duration(3))
+    control.hoverNoAuto()
     loop = 1
     randomFlag = False
 
     while not rospy.is_shutdown() :
-        if loop < 200 and me.markercount==1:
+        if loop < 300 and me.markercount==1:
 
             if randomFlag is False:
                 #prevMarker = getattr(me.marker, 'time') #
@@ -348,12 +384,13 @@ if __name__ == '__main__':
                 vel = Pcontrol(np.array([500,500]), currpos,currtime,prevpos,prevtime)
                 prevtime = currtime
                 prevpos = currpos
-                print (-vel[1],-vel[0])
+                # print (-vel[1],-vel[0])
                 control.xyinput(vel)
             rospy.sleep(rospy.Duration(0.1)) # wait a bit
             loop += 1
-        elif loop < 200:
-            control.hover()
+        elif loop < 300:
+            randomFlag = False
+            control.hoverNoAuto()
             rospy.sleep(rospy.Duration(0.1)) # wait a bit
             loop += 1
         else:
