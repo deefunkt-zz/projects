@@ -143,33 +143,8 @@ def drawmarker(rows,cols,marker):
     rect.center = (marker.cx*cols/1000,marker.cy*rows/1000)
     return rect
 
-def seeimage(ros_image,marker):
-    bridge = CvBridge()
-    try:
-        cv_image = bridge.imgmsg_to_cv2(ros_image,"bgr8") #rgb
-    except CvBridgeError as e:
-        print(e)
-    if me.markercount == 1:
-        (rows,cols,channels) = cv_image.shape
-        colour = (255,0,0)
-        rect = drawmarker(rows,cols,marker)
-        cv2.line(cv_image,rect.pt1,rect.pt2,colour)
-        cv2.line(cv_image,rect.pt2,rect.pt3,colour)
-        cv2.line(cv_image,rect.pt3,rect.pt4,colour)
-        cv2.line(cv_image,rect.pt4,rect.pt1,colour)
-        cv2.circle(cv_image,(marker.cx*cols/1000,marker.cy*rows/1000),3,colour)
-    cv2.imshow("Image window", cv_image)  # cv_image is a matrix
 
-    # cv2.imshow("Image window", cv_image)  # cv_image is a matrix
-    # cv2.waitKey(3)
-    # mask = cv2.inRange(cv_image, blueLower, blueUpper)
-    # cv2.imshow("Masked window", mask)
-    # cv2.waitKey(3)
-    global centerblue
-    [findblock,centerblue] = processimage(cv_image)
-    print centerblue
-    cv2.imshow("block window", findblock)
-    cv2.waitKey(3)
+
 
 # takes in [x, y] coordinates of marker, and executes a moveForward or moveBack based on error in position
 def followImage(marker, height, time, previouspos, previoustime,counter):
@@ -204,27 +179,62 @@ def followImage(marker, height, time, previouspos, previoustime,counter):
     return np.array([marker, time])
 
 
-def processimage(cv_image):
+class analysefront():
+    def __init__(self):
+        self.cv_image = -1
+        self.bridge = CvBridge()
+        self.timefront = -1
+
+    def seeimage(self,ros_image,centerblue,radiusblue,circle):
+        try:
+            cv_image = self.bridge.imgmsg_to_cv2(ros_image,"bgr8") #rgb
+        except CvBridgeError as e:
+            print(e)
+        # if me.markercount == 1:  # for bottom camera
+        #     (rows,cols,channels) = cv_image.shape
+        #     colour = (255,0,0)
+        #     rect = drawmarker(rows,cols,marker)
+        #     cv2.line(cv_image,rect.pt1,rect.pt2,colour)
+        #     cv2.line(cv_image,rect.pt2,rect.pt3,colour)
+        #     cv2.line(cv_image,rect.pt3,rect.pt4,colour)
+        #     cv2.line(cv_image,rect.pt4,rect.pt1,colour)
+        #     cv2.circle(cv_image,(marker.cx*cols/1000,marker.cy*rows/1000),3,colour)
+
+        # cv_image is a matrix
+        self.timefront = rospy.get_time()
+        if radiusblue > 0:
+            cv2.circle(cv_image, centerblue, 5, (0, 0, 255), -1)
+            cv2.circle(cv_image, circle, int(radiusblue),(0, 255, 255), 2)
+            cv2.imshow("Image window", cv_image)
+        else:
+            cv2.imshow("Image window", cv_image)
+        cv2.waitKey(3)
+
+def processimage(cv_image,time):
     cv_hsv = cv2.cvtColor(cv_image,cv2.COLOR_BGR2HSV)
-    cv2.imshow("HSV window", cv_hsv)
-    cv2.imwrite('block_hsv.jpg', cv_hsv)
+    # cv2.imshow("HSV window", cv_hsv)
+    # cv2.imwrite('block_hsv.jpg', cv_hsv)
     mask = cv2.inRange(cv_hsv, blueLower, blueUpper)
-    # mask = cv2.erode(mask, None, iterations=2)
+    mask = cv2.erode(mask, None, iterations=2)
     mask = cv2.dilate(mask, None, iterations=2)
-    cv2.imshow("Masked Window",mask)
-    cv2.waitKey(3)
+    # cv2.imshow("Masked Window",mask)
+    # cv2.waitKey(3)
     cnts = cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)[-2]
     center = None
     if len(cnts) > 0:  # only proceed if at least one contour was found
         c = max(cnts, key=cv2.contourArea)
         ((x, y), radius) = cv2.minEnclosingCircle(c)
+        circle = np.array([int(x),int(y)])
         M = cv2.moments(c)
-        center = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))
+        center = np.array([int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"])])
 
-        if radius > 10: # only proceed if the radius meets a minimum size
-            cv2.circle(cv_image, (int(x), int(y)), int(radius),(0, 255, 255), 2)
-            cv2.circle(cv_image, center, 5, (0, 0, 255), -1)
-    return [cv_image, center]
+        if radius < 10: # only proceed if the radius meets a minimum size
+
+            # cv2.circle(cv_image, center, 5, (0, 0, 255), -1)
+        # else:
+            radius = -1
+            center = np.array([-1,-1]) # didnt see
+    return (center, radius,time,circle)
 
 
 class twistMatrix:
@@ -280,9 +290,6 @@ class twistMatrix:
         cmd.linear.x = -0.3
         cmd.linear.y = 0
         cmd.linear.z = 0
-
-
-
         cmd.angular.x = 0
         cmd.angular.y = 0
         cmd.angular.z = 0
@@ -376,7 +383,11 @@ if __name__ == '__main__':
     this = initdrone()
     me = BasicDroneController()  # should automatically call GetNavdata when something in received in subscriber
     subNavdata = rospy.Subscriber('/ardrone/navdata', dronemsgs.Navdata, me.GetNavdata)
-    image_sub = rospy.Subscriber("/ardrone/image_raw", Image, seeimage, me.marker)
+    frontcam = analysefront()
+    image_sub = rospy.Subscriber("/ardrone/image_raw", Image, seeimage,centerblue,radiusblue)
+
+    # image_sub = rospy.Subscriber("/ardrone/image_raw", Image, seeimage, me.marker)
+
     pubReset = rospy.Publisher("/ardrone/reset", stMsg.Empty, queue_size=1)
     pubTakeoff = rospy.Publisher("/ardrone/takeoff", stMsg.Empty, queue_size=1)
     pubLand = rospy.Publisher("/ardrone/land", stMsg.Empty, queue_size=1)
@@ -404,6 +415,8 @@ if __name__ == '__main__':
     mycounter = 0
     print "lets roollll"
     while 1:
+        [centerblue,radiusblue,timeblue] = processimage(frontcam.cv_image,frontcam.timefront)
+
         try:
             if me.markercount is 1:
                 thisfunction = followImage(getattr(me.marker, 'cvec'), getattr(me.marker, 'dist'),getattr(me.marker, 'time'), previousMarkerObject[0], previousMarkerObject[1],mycounter)
