@@ -28,6 +28,16 @@ roundel_alpha = 0.5051   # in rad = 28.94 degrees (long)
 roundel_beta = math.pi - 0.7736  # in rad = 180- 44.32 degrees (short)
 r2d = 180/math.pi
 d2r = math.pi/180
+# dark
+# blueLower = (53, 21, 16)  # BGR
+# blueUpper = (100,51,43)
+# light
+# blueLower = (210,30,50)  # HSV
+# blueUpper = (240, 80, 100)
+blueLower = (110,120,70)
+blueUpper = (125,220,150)  # BGR of HSV file
+
+centerblue = 0
 
 
 def initdrone():
