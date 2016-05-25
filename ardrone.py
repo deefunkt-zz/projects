@@ -56,13 +56,12 @@ d2r = math.pi/180
 blueLower = (110,120,70)
 blueUpper = (125,220,150)  # BGR of HSV file
 
-centerblue = 0
 
-plt.figure(1)
-plt.subplot(211)
-plt.subplot(212)
-plt.ion()
-plt.show()
+# plt.figure(1)
+# plt.subplot(211)
+# plt.subplot(212)
+# plt.ion()
+# plt.show()
 
 
 def initdrone():
@@ -147,12 +146,17 @@ def drawmarker(rows,cols,marker):
 
 
 # takes in [x, y] coordinates of marker, and executes a moveForward or moveBack based on error in position
-def followImage(marker, height, time, previouspos, previoustime,horobpos, horobtime, prevhorobpos, prevhorobtime):
+def followImage(marker, height, time,horobpos, horobtime, prevparam):
+    previouspos = prevparam[0:2]
+    previoustime = prevparam[2:3]
+    prevhorobpos = prevparam[3:5]
+    prevhorobtime = prevparam[5:]
+
     center = np.array([500., 500.])
     kp = 1/1500.
     kd = 0.03
 
-    kp_z = 0.0
+    kp_z = 1/3000
     kd_z = 0.0
     errorInZPos = float((500-horobpos[1]))
     errorInXPos = float((500 - marker[1]))  # since the errors in camera image and drone reference are inverted, we use
@@ -184,27 +188,29 @@ def followImage(marker, height, time, previouspos, previoustime,horobpos, horobt
     p1sec = rospy.Duration(0, 1000000)
     rospy.sleep(p1sec)
     control.moveXYZ(pdControlX, pdControlY, pdControlZ, height)
-    return np.array([marker, time])
+    return np.array([marker, time,horobpos,horobtime]) # return current values to use as previous values
 
 
 class analysefront():
     def __init__(self):
         self.cv_image = -1
         self.bridge = CvBridge()
-        self.timefront = -1
+        self.timefront = rospy.get_time()
 
-    def seeimage(self,ros_image,arguments):
-        radiusblue = arguments[]
+    def seeimage(self,ros_image,objectim):
+        arguments = objectim.frontcamargs
+
         try:
-            cv_image = self.bridge.imgmsg_to_cv2(ros_image,"bgr8") #rgb
+            self.cv_image = self.bridge.imgmsg_to_cv2(ros_image,"bgr8") #rgb
+            imagecopy = self.bridge.imgmsg_to_cv2(ros_image,"bgr8") #rgb
             self.timefront = rospy.get_time()
-            if radiusblue > 0:
-                cv2.circle(cv_image, centerblue, 5, (0, 0, 255), -1)
-                cv2.circle(cv_image, circle, int(radiusblue),(0, 255, 255), 2)
-                cv2.imshow("Image window", cv_image)
+            if arguments[2] > 0: # if there is a marker on the front camera
+                cv2.circle(imagecopy, (int(arguments[0]),int(arguments[1])), 5, (0, 0, 255), -1)
+                cv2.circle(imagecopy, (int(arguments[3]),int(arguments[4])), int(arguments[2]),(0, 255, 255), 2)
+                cv2.imshow("Image window", imagecopy)
             else:
-                cv2.imshow("Image window", cv_image)
-            cv2.waitKey(3)
+                cv2.imshow("Image window",self.cv_image)
+            # cv2.waitKey(3)
         except CvBridgeError as e:
             print(e)
         # if me.markercount == 1:  # for bottom camera
@@ -217,15 +223,6 @@ class analysefront():
         #     cv2.line(cv_image,rect.pt4,rect.pt1,colour)
         #     cv2.circle(cv_image,(marker.cx*cols/1000,marker.cy*rows/1000),3,colour)
 
-        # cv_image is a matrix
-        self.timefront = rospy.get_time()
-        if radiusblue > 0:
-            cv2.circle(cv_image, centerblue, 5, (0, 0, 255), -1)
-            cv2.circle(cv_image, circle, int(radiusblue),(0, 255, 255), 2)
-            cv2.imshow("Image window", cv_image)
-        else:
-            cv2.imshow("Image window", cv_image)
-        cv2.waitKey(3)
 
 def processimage(cv_image,time):
     cv_hsv = cv2.cvtColor(cv_image,cv2.COLOR_BGR2HSV)
@@ -236,27 +233,35 @@ def processimage(cv_image,time):
     mask = cv2.dilate(mask, None, iterations=2)
     # cv2.imshow("Masked Window",mask)
     # cv2.waitKey(3)
+    frontcamargs = np.array([0,0,0,0,0,time])
     cnts = cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)[-2]
     if len(cnts) > 0:  # only proceed if at least one contour was found
         c = max(cnts, key=cv2.contourArea)
         ((x, y), radius) = cv2.minEnclosingCircle(c)
-        frontcamargs[3] = np.array([int(x),int(y)])
+        frontcamargs[2] = int(radius)
+        frontcamargs[3] = int(x)
+        frontcamargs[4] = int(y)
         M = cv2.moments(c)
         frontcamargs[0] = int(M["m10"] / M["m00"])
         frontcamargs[1] = int(M["m01"] / M["m00"])
 
-        if frontcamargs[2] < 10: # only proceed if the radius meets a minimum size
+        if frontcamargs[2] < 5: # only proceed if the radius meets a minimum size
 
             # cv2.circle(cv_image, center, 5, (0, 0, 255), -1)
         # else:
-            radius = -1
-            center = np.array([-1,-1]) # didnt see
-    else:
-        center = np.array([-1, -1])
-        radius = -1
-        circle = np.array([-1, -1])
+            frontcamargs = np.array([0,0,0,0,0,time])
+        #     radius = -1
+        #     center = np.array([-1,-1]) # didnt see
+        # center = np.array([-1, -1])
+        # radius = -1
+        # circle = np.array([-1, -1])
     # return (center, radius, circle,time)
     return frontcamargs
+
+
+class classargs():
+    def __init__(self):
+        self.frontcamargs = np.array([0,0,0,0,0,0])
 
 
 class twistMatrix:
@@ -402,18 +407,17 @@ if __name__ == '__main__':
     me = BasicDroneController()  # should automatically call GetNavdata when something in received in subscriber
     subNavdata = rospy.Subscriber('/ardrone/navdata', dronemsgs.Navdata, me.GetNavdata)
     frontcam = analysefront()
+    seeimageargs = classargs()
+    # centerblue = np.array([-1,-1])
+    # radiusblue = -1
+    # circle = np.array([-1,-1])
 
-    centerblue = np.array([-1,-1])
-    radiusblue = -1
-    circle = np.array([-1,-1])
-    frontcamargs = np.array([-1,-1,-1,-1,-1])
-
-    image_sub = rospy.Subscriber("/ardrone/image_raw", Image, analysefront.seeimage, frontcamargs)
+    image_sub = rospy.Subscriber("/ardrone/image_raw", Image, frontcam.seeimage, seeimageargs)
 
     # image_sub = rospy.Subscriber("/ardrone/image_raw", Image, seeimage, me.marker)
 
     pubReset = rospy.Publisher("/ardrone/reset", stMsg.Empty, queue_size=1)
-    pubTakeoff = rospy.Publisher("/ardrone/takeoff", stMsg.Empty, queue_size=1)
+    # pubTakeoff = rospy.Publisher("/ardrone/takeoff", stMsg.Empty, queue_size=1)
     pubLand = rospy.Publisher("/ardrone/land", stMsg.Empty, queue_size=1)
     pubCmd = rospy.Publisher("/cmd_vel", Twist, queue_size=6)
     EmptyMessage = stMsg.Empty()
@@ -429,11 +433,11 @@ if __name__ == '__main__':
     rospy.sleep(rospy.Duration(1))
     control.hoverNoAuto()
     rospy.sleep(rospy.Duration(3))
-    control.moveXYZ(0,0,0.1) # increase hover height to widen field of view
+    control.moveXYZ(0,0,0.1,160) # increase hover height to widen field of view
     rospy.sleep(rospy.Duration(1))
 
     # while not rospy.is_shutdown():
-    horobPos = np.array([0,0])
+    horObPos = np.array([0,0])
     horObTime = rospy.get_time()
     previousMarker = np.array([500, 500])
     prevTime = getattr(me.marker, 'time')
@@ -443,12 +447,17 @@ if __name__ == '__main__':
     mycounter = 0
     print "lets roollll"
     while 1:
-        frontcamargs = processimage(frontcam.cv_image,frontcam.timefront)
-
         try:
+            if frontcam.cv_image is not -1:
+                seeimageargs.frontcamargs = processimage(frontcam.cv_image,frontcam.timefront)
+                horObPos = seeimageargs.frontcamargs[0:2]
+                horObTime = seeimageargs.frontcamargs[5]
+
+                # print 'processed image' + str(frontcamargs)
+
             if me.markercount is 1:
                 thisfunction = followImage(getattr(me.marker, 'cvec'), getattr(me.marker, 'dist'),getattr(me.marker, 'time'),
-                previousMarkerObject[0], previousMarkerObject[1],horobPos, horObTime,previousMarkerObject[3], previousMarkerObject[4])
+                                           horObPos, horObTime, previousMarkerObject)
                 mycounter += 1
                 previousMarkerObject = thisfunction
                 # rospy.spin()
