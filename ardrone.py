@@ -210,7 +210,7 @@ class analysefront():
                 cv2.imshow("Image window", imagecopy)
             else:
                 cv2.imshow("Image window",self.cv_image)
-            # cv2.waitKey(3)
+            cv2.waitKey(1)
         except CvBridgeError as e:
             print(e)
         # if me.markercount == 1:  # for bottom camera
