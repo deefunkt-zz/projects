@@ -56,8 +56,6 @@ d2r = math.pi/180
 blueLower = (110,120,70)
 blueUpper = (125,220,150)  # BGR of HSV file
 
-centerblue = 0
-
 plt.figure(1)
 plt.subplot(211)
 plt.subplot(212)
@@ -191,11 +189,19 @@ class analysefront():
     def __init__(self):
         self.cv_image = -1
         self.bridge = CvBridge()
-        self.timefront = -1
+        self.timefront = rospy.get_time()
 
     def seeimage(self,ros_image,centerblue,radiusblue,circle):
         try:
             cv_image = self.bridge.imgmsg_to_cv2(ros_image,"bgr8") #rgb
+            self.timefront = rospy.get_time()
+            if radiusblue > 0:
+                cv2.circle(cv_image, centerblue, 5, (0, 0, 255), -1)
+                cv2.circle(cv_image, circle, int(radiusblue),(0, 255, 255), 2)
+                cv2.imshow("Image window", cv_image)
+            else:
+                cv2.imshow("Image window", cv_image)
+            cv2.waitKey(3)
         except CvBridgeError as e:
             print(e)
         # if me.markercount == 1:  # for bottom camera
@@ -209,14 +215,7 @@ class analysefront():
         #     cv2.circle(cv_image,(marker.cx*cols/1000,marker.cy*rows/1000),3,colour)
 
         # cv_image is a matrix
-        self.timefront = rospy.get_time()
-        if radiusblue > 0:
-            cv2.circle(cv_image, centerblue, 5, (0, 0, 255), -1)
-            cv2.circle(cv_image, circle, int(radiusblue),(0, 255, 255), 2)
-            cv2.imshow("Image window", cv_image)
-        else:
-            cv2.imshow("Image window", cv_image)
-        cv2.waitKey(3)
+
 
 def processimage(cv_image,time):
     cv_hsv = cv2.cvtColor(cv_image,cv2.COLOR_BGR2HSV)
@@ -392,7 +391,11 @@ if __name__ == '__main__':
     me = BasicDroneController()  # should automatically call GetNavdata when something in received in subscriber
     subNavdata = rospy.Subscriber('/ardrone/navdata', dronemsgs.Navdata, me.GetNavdata)
     frontcam = analysefront()
-    image_sub = rospy.Subscriber("/ardrone/image_raw", Image, seeimage,centerblue,radiusblue)
+    centerblue = np.array([-1,-1])
+    radiusblue = -1
+    circle = np.array([-1,-1])
+
+    image_sub = rospy.Subscriber("/ardrone/image_raw", Image, analysefront.seeimage,centerblue,radiusblue,circle)
 
     # image_sub = rospy.Subscriber("/ardrone/image_raw", Image, seeimage, me.marker)
 
