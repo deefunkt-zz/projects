@@ -10,8 +10,27 @@ import math
 from cv_bridge import CvBridge, CvBridgeError
 import numpy as np
 from sensor_msgs.msg import Image
+import matplotlib.pyplot as plt
 from ardrone_autonomy.msg import Navdata
 
+
+# abc = 0
+# plt.figure(1)
+# plt.subplot(211)
+# plt.scatter(abc,abc)
+# plt.ylim([-500, 500])
+# plt.subplot(212)
+# plt.scatter(abc+1,abc+1)
+# plt.ylim([-500, 500])
+# plt.ion()
+# plt.show()
+# while 1:
+#     plt.subplot(211)
+#     plt.scatter(abc,abc)
+#     plt.subplot(212)
+#     plt.scatter(abc*2,abc*2)
+#     plt.draw()
+#     abc += 1
 
 #
 # done. track marker over multiple images
@@ -28,6 +47,12 @@ roundel_alpha = 0.5051   # in rad = 28.94 degrees (long)
 roundel_beta = math.pi - 0.7736  # in rad = 180- 44.32 degrees (short)
 r2d = 180/math.pi
 d2r = math.pi/180
+
+plt.figure(1)
+plt.subplot(211)
+plt.subplot(212)
+plt.ion()
+plt.show()
 
 
 def initdrone():
@@ -127,12 +152,22 @@ def seeimage(ros_image,marker):
     cv2.waitKey(3)
 
 # takes in [x, y] coordinates of marker, and executes a moveForward or moveBack based on error in position
-def followImage(marker, height, time, previouspos, previoustime):
+def followImage(marker, height, time, previouspos, previoustime,counter):
     center = np.array([500., 500.])
     kp = 1/1500.
-    kd = 0.07
+    kd = 0.03
     errorInXPos = float((500 - marker[1]))  # since the errors in camera image and drone reference are inverted, we use
     errorInYPos = float((500 - marker[0]))  # the opposite vector elements in marker[]
+    plt.figure(1)
+    plt.subplot(211)
+    plt.scatter(counter,errorInXPos)
+    plt.ylim([-500, 500])
+    plt.subplot(212)
+    plt.scatter(counter, errorInYPos)
+    plt.ylim([-500, 500])
+    plt.draw()
+
+
     dt = (time - previoustime)
     # errorNow - prevError divided by the time
     derror = ((center - marker) - (center - previouspos)) / dt
@@ -143,7 +178,7 @@ def followImage(marker, height, time, previouspos, previoustime):
     print "move in x: " + str(pdControlX) + "\nmove in y: " + str(pdControlY)
     print "Our height is; " + str(height)
     print "The change in Time: " + str(dt)
-    p1sec = rospy.Duration(0, 10000000)
+    p1sec = rospy.Duration(0, 1000000)
     rospy.sleep(p1sec)
     control.moveXY(pdControlX, pdControlY, height)
     return np.array([marker, time])
@@ -322,10 +357,13 @@ if __name__ == '__main__':
     previousMarker = np.array([500, 500])
     prevTime = getattr(me.marker, 'time')
     previousMarkerObject = np.array([previousMarker, prevTime])
+    mycounter = 0
+    print "lets roollll"
     while 1:
         try:
             if me.markercount is 1:
-                thisfunction = followImage(getattr(me.marker, 'cvec'), getattr(me.marker, 'dist'),getattr(me.marker, 'time'), previousMarkerObject[0], previousMarkerObject[1])
+                thisfunction = followImage(getattr(me.marker, 'cvec'), getattr(me.marker, 'dist'),getattr(me.marker, 'time'), previousMarkerObject[0], previousMarkerObject[1],mycounter)
+                mycounter += 1
                 previousMarkerObject = thisfunction
                 # rospy.spin()
             else:
