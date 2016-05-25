@@ -85,9 +85,9 @@ class BasicDroneController(object):
         self.marker_dis = -1
         self.marker = createmarker()    # classes
 
-        # subscriber to the navdata, when a message is received call the fn self.GetNavdata
-        self.subNavdata = rospy.Subscriber("/ardrone/navdata",dronemsgs.Navdata,self.GetNavdata)  # can it call outside the class?
-        self.pubReset = rospy.Publisher("/ardrone/reset",stMsg.Empty,queue_size=3)
+        # # subscriber to the navdata, when a message is received call the fn self.GetNavdata
+        # self.subNavdata = rospy.Subscriber("/ardrone/navdata",dronemsgs.Navdata,self.GetNavdata)  # can it call outside the class?
+        # self.pubReset = rospy.Publisher("/ardrone/reset",stMsg.Empty,queue_size=3)
 
     # retrive and store data??
     def GetNavdata(self,data):
@@ -147,35 +147,43 @@ def drawmarker(rows,cols,marker):
 
 
 # takes in [x, y] coordinates of marker, and executes a moveForward or moveBack based on error in position
-def followImage(marker, height, time, previouspos, previoustime,counter):
+def followImage(marker, height, time, previouspos, previoustime,horobpos, horobtime, prevhorobpos, prevhorobtime):
     center = np.array([500., 500.])
     kp = 1/1500.
     kd = 0.03
+
+    kp_z = 0.0
+    kd_z = 0.0
+    errorInZPos = float((500-horobpos[1]))
     errorInXPos = float((500 - marker[1]))  # since the errors in camera image and drone reference are inverted, we use
     errorInYPos = float((500 - marker[0]))  # the opposite vector elements in marker[]
-    plt.figure(1)
-    plt.subplot(211)
-    plt.scatter(counter,errorInXPos)
-    plt.ylim([-500, 500])
-    plt.subplot(212)
-    plt.scatter(counter, errorInYPos)
-    plt.ylim([-500, 500])
-    plt.draw()
+    # plt.figure(1)
+    # plt.subplot(211)
+    # plt.scatter(counter,errorInXPos)
+    # plt.ylim([-500, 500])
+    # plt.subplot(212)
+    # plt.scatter(counter, errorInYPos)
+    # plt.ylim([-500, 500])
+    # plt.draw()
 
-
+    dtZ = (horobtime - prevhorobtime)
     dt = (time - previoustime)
     # errorNow - prevError divided by the time
-    derror = ((center - marker) - (center - previouspos)) / dt
+    derror = (previouspos - marker)/dt
+    derrorZ = (prevhorobpos-horobpos)/dtZ
     if math.isnan(derror[0]):
         derror = [0., 0.]
+    if math.isnan(derrorZ):
+        derrorZ =0
     pdControlX = float(kp*errorInXPos + kd*derror[1])
     pdControlY = float(kp*errorInYPos + kd*derror[0])
-    print "move in x: " + str(pdControlX) + "\nmove in y: " + str(pdControlY)
+    pdControlZ = float(kp_z*errorInZPos + kd_z*derrorZ)
+    print "move in x: " + str(pdControlX) + "\nmove in y: " + str(pdControlY) + "\nmove in z: " + str(pdControlZ)
     print "Our height is; " + str(height)
     print "The change in Time: " + str(dt)
     p1sec = rospy.Duration(0, 1000000)
     rospy.sleep(p1sec)
-    control.moveXY(pdControlX, pdControlY, height)
+    control.moveXYZ(pdControlX, pdControlY, pdControlZ, height)
     return np.array([marker, time])
 
 
@@ -242,11 +250,11 @@ class twistMatrix:
     def __init__(self, movePublisher):
         self.movePub = movePublisher
 
-    def moveXY(self, x, y, height):
+    def moveXYZ(self, x, y, z, height):
         cmd = Twist()
         cmd.linear.x = 0.25*x
         cmd.linear.y = 0.25*y
-        cmd.linear.z = 0
+        cmd.linear.z = 0.25*z
         cmd.angular.x = 0
         cmd.angular.y = 0
         cmd.angular.z = 0
@@ -405,13 +413,17 @@ if __name__ == '__main__':
     rospy.sleep(rospy.Duration(1))
     control.hoverNoAuto()
     rospy.sleep(rospy.Duration(3))
-    control.moveXY(0,0,0.1) # increase hover height to widen field of view
+    control.moveXYZ(0,0,0.1) # increase hover height to widen field of view
     rospy.sleep(rospy.Duration(1))
 
     # while not rospy.is_shutdown():
+    horobPos = np.array([0,0])
+    horObTime = rospy.get_time()
     previousMarker = np.array([500, 500])
     prevTime = getattr(me.marker, 'time')
-    previousMarkerObject = np.array([previousMarker, prevTime])
+    prevHorTime = prevTime
+    prevHorOb = 500
+    previousMarkerObject = np.array([previousMarker, prevTime, prevHorOb, prevHorTime])
     mycounter = 0
     print "lets roollll"
     while 1:
@@ -419,7 +431,8 @@ if __name__ == '__main__':
 
         try:
             if me.markercount is 1:
-                thisfunction = followImage(getattr(me.marker, 'cvec'), getattr(me.marker, 'dist'),getattr(me.marker, 'time'), previousMarkerObject[0], previousMarkerObject[1],mycounter)
+                thisfunction = followImage(getattr(me.marker, 'cvec'), getattr(me.marker, 'dist'),getattr(me.marker, 'time'),
+                previousMarkerObject[0], previousMarkerObject[1],horobPos, horObTime,previousMarkerObject[3], previousMarkerObject[4])
                 mycounter += 1
                 previousMarkerObject = thisfunction
                 # rospy.spin()
