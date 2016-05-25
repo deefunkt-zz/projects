@@ -56,6 +56,8 @@ d2r = math.pi/180
 blueLower = (110,120,70)
 blueUpper = (125,220,150)  # BGR of HSV file
 
+centerblue = 0
+
 plt.figure(1)
 plt.subplot(211)
 plt.subplot(212)
@@ -189,9 +191,10 @@ class analysefront():
     def __init__(self):
         self.cv_image = -1
         self.bridge = CvBridge()
-        self.timefront = rospy.get_time()
+        self.timefront = -1
 
-    def seeimage(self,ros_image,centerblue,radiusblue,circle):
+    def seeimage(self,ros_image,arguments):
+        radiusblue = arguments[]
         try:
             cv_image = self.bridge.imgmsg_to_cv2(ros_image,"bgr8") #rgb
             self.timefront = rospy.get_time()
@@ -215,7 +218,14 @@ class analysefront():
         #     cv2.circle(cv_image,(marker.cx*cols/1000,marker.cy*rows/1000),3,colour)
 
         # cv_image is a matrix
-
+        self.timefront = rospy.get_time()
+        if radiusblue > 0:
+            cv2.circle(cv_image, centerblue, 5, (0, 0, 255), -1)
+            cv2.circle(cv_image, circle, int(radiusblue),(0, 255, 255), 2)
+            cv2.imshow("Image window", cv_image)
+        else:
+            cv2.imshow("Image window", cv_image)
+        cv2.waitKey(3)
 
 def processimage(cv_image,time):
     cv_hsv = cv2.cvtColor(cv_image,cv2.COLOR_BGR2HSV)
@@ -227,21 +237,26 @@ def processimage(cv_image,time):
     # cv2.imshow("Masked Window",mask)
     # cv2.waitKey(3)
     cnts = cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)[-2]
-    center = None
     if len(cnts) > 0:  # only proceed if at least one contour was found
         c = max(cnts, key=cv2.contourArea)
         ((x, y), radius) = cv2.minEnclosingCircle(c)
-        circle = np.array([int(x),int(y)])
+        frontcamargs[3] = np.array([int(x),int(y)])
         M = cv2.moments(c)
-        center = np.array([int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"])])
+        frontcamargs[0] = int(M["m10"] / M["m00"])
+        frontcamargs[1] = int(M["m01"] / M["m00"])
 
-        if radius < 10: # only proceed if the radius meets a minimum size
+        if frontcamargs[2] < 10: # only proceed if the radius meets a minimum size
 
             # cv2.circle(cv_image, center, 5, (0, 0, 255), -1)
         # else:
             radius = -1
             center = np.array([-1,-1]) # didnt see
-    return (center, radius,time,circle)
+    else:
+        center = np.array([-1, -1])
+        radius = -1
+        circle = np.array([-1, -1])
+    # return (center, radius, circle,time)
+    return frontcamargs
 
 
 class twistMatrix:
@@ -368,10 +383,6 @@ class twistMatrix:
         cmd.angular.z = 0
         self.movePub.publish(cmd)
 
-
-
-
-
     def land(self, landPub):
         self.autoHover()
         rospy.sleep(rospy.Duration(0.5))
@@ -391,11 +402,13 @@ if __name__ == '__main__':
     me = BasicDroneController()  # should automatically call GetNavdata when something in received in subscriber
     subNavdata = rospy.Subscriber('/ardrone/navdata', dronemsgs.Navdata, me.GetNavdata)
     frontcam = analysefront()
+
     centerblue = np.array([-1,-1])
     radiusblue = -1
     circle = np.array([-1,-1])
+    frontcamargs = np.array([-1,-1,-1,-1,-1])
 
-    image_sub = rospy.Subscriber("/ardrone/image_raw", Image, analysefront.seeimage,centerblue,radiusblue,circle)
+    image_sub = rospy.Subscriber("/ardrone/image_raw", Image, analysefront.seeimage, frontcamargs)
 
     # image_sub = rospy.Subscriber("/ardrone/image_raw", Image, seeimage, me.marker)
 
@@ -430,7 +443,7 @@ if __name__ == '__main__':
     mycounter = 0
     print "lets roollll"
     while 1:
-        [centerblue,radiusblue,timeblue] = processimage(frontcam.cv_image,frontcam.timefront)
+        frontcamargs = processimage(frontcam.cv_image,frontcam.timefront)
 
         try:
             if me.markercount is 1:
