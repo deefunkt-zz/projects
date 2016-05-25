@@ -47,6 +47,16 @@ roundel_alpha = 0.5051   # in rad = 28.94 degrees (long)
 roundel_beta = math.pi - 0.7736  # in rad = 180- 44.32 degrees (short)
 r2d = 180/math.pi
 d2r = math.pi/180
+# dark
+# blueLower = (53, 21, 16)  # BGR
+# blueUpper = (100,51,43)
+# light
+# blueLower = (210,30,50)  # HSV
+# blueUpper = (240, 80, 100)
+blueLower = (110,120,70)
+blueUpper = (125,220,150)  # BGR of HSV file
+
+centerblue = 0
 
 plt.figure(1)
 plt.subplot(211)
@@ -149,6 +159,16 @@ def seeimage(ros_image,marker):
         cv2.line(cv_image,rect.pt4,rect.pt1,colour)
         cv2.circle(cv_image,(marker.cx*cols/1000,marker.cy*rows/1000),3,colour)
     cv2.imshow("Image window", cv_image)  # cv_image is a matrix
+
+    # cv2.imshow("Image window", cv_image)  # cv_image is a matrix
+    # cv2.waitKey(3)
+    # mask = cv2.inRange(cv_image, blueLower, blueUpper)
+    # cv2.imshow("Masked window", mask)
+    # cv2.waitKey(3)
+    global centerblue
+    [findblock,centerblue] = processimage(cv_image)
+    print centerblue
+    cv2.imshow("block window", findblock)
     cv2.waitKey(3)
 
 # takes in [x, y] coordinates of marker, and executes a moveForward or moveBack based on error in position
@@ -182,6 +202,30 @@ def followImage(marker, height, time, previouspos, previoustime,counter):
     rospy.sleep(p1sec)
     control.moveXY(pdControlX, pdControlY, height)
     return np.array([marker, time])
+
+
+def processimage(cv_image):
+    cv_hsv = cv2.cvtColor(cv_image,cv2.COLOR_BGR2HSV)
+    cv2.imshow("HSV window", cv_hsv)
+    cv2.imwrite('block_hsv.jpg', cv_hsv)
+    mask = cv2.inRange(cv_hsv, blueLower, blueUpper)
+    # mask = cv2.erode(mask, None, iterations=2)
+    mask = cv2.dilate(mask, None, iterations=2)
+    cv2.imshow("Masked Window",mask)
+    cv2.waitKey(3)
+    cnts = cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)[-2]
+    center = None
+    if len(cnts) > 0:  # only proceed if at least one contour was found
+        c = max(cnts, key=cv2.contourArea)
+        ((x, y), radius) = cv2.minEnclosingCircle(c)
+        M = cv2.moments(c)
+        center = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))
+
+        if radius > 10: # only proceed if the radius meets a minimum size
+            cv2.circle(cv_image, (int(x), int(y)), int(radius),(0, 255, 255), 2)
+            cv2.circle(cv_image, center, 5, (0, 0, 255), -1)
+    return [cv_image, center]
+
 
 class twistMatrix:
 
