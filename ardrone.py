@@ -53,9 +53,10 @@ d2r = math.pi/180
 # light
 # blueLower = (210,30,50)  # HSV
 # blueUpper = (240, 80, 100)
-blueLower = (110,120,70)
-blueUpper = (125,220,150)  # BGR of HSV file
-
+# blueLower = (110,100,50)
+# blueUpper = (125,220,150)  # BGR of HSV file
+blueLower = np.array([110,50,50])
+blueUpper = np.array([125,225,255])  # BGR of HSV file
 
 # plt.figure(1)
 # plt.subplot(211)
@@ -147,18 +148,20 @@ def drawmarker(rows,cols,marker):
 
 # takes in [x, y] coordinates of marker, and executes a moveForward or moveBack based on error in position
 def followImage(marker, height, time,horobpos, horobtime, prevparam):
-    previouspos = prevparam[0:2]
-    previoustime = prevparam[2:3]
-    prevhorobpos = prevparam[3:5]
-    prevhorobtime = prevparam[5:]
+    previouspos = prevparam[0]
+    previoustime = prevparam[1]
+    prevhorobpos = prevparam[2]
+    prevhorobtime = prevparam[3]
 
     center = np.array([500., 500.])
     kp = 1/1500.
     kd = 0.03
 
-    kp_z = 1/3000
+    kp_z = 1/1000.
     kd_z = 0.0
-    errorInZPos = float((500-horobpos[1]))
+
+    errorInZPos = float(180-horobpos[1])
+    # print (horobpos[0],horobpos[1])
     errorInXPos = float((500 - marker[1]))  # since the errors in camera image and drone reference are inverted, we use
     errorInYPos = float((500 - marker[0]))  # the opposite vector elements in marker[]
     # plt.figure(1)
@@ -170,21 +173,24 @@ def followImage(marker, height, time,horobpos, horobtime, prevparam):
     # plt.ylim([-500, 500])
     # plt.draw()
 
-    dtZ = (horobtime - prevhorobtime)
+    # dtZ = (horobtime - prevhorobtime)
     dt = (time - previoustime)
     # errorNow - prevError divided by the time
     derror = (previouspos - marker)/dt
-    derrorZ = (prevhorobpos-horobpos)/dtZ
+    # derrorZ = (prevhorobpos-horobpos)/dtZ
+
     if math.isnan(derror[0]):
         derror = [0., 0.]
-    if math.isnan(derrorZ):
-        derrorZ =0
+    # if math.isnan(derrorZ[0]):
+    #     derrorZ =0
     pdControlX = float(kp*errorInXPos + kd*derror[1])
     pdControlY = float(kp*errorInYPos + kd*derror[0])
-    pdControlZ = float(kp_z*errorInZPos + kd_z*derrorZ)
-    print "move in x: " + str(pdControlX) + "\nmove in y: " + str(pdControlY) + "\nmove in z: " + str(pdControlZ)
-    print "Our height is; " + str(height)
-    print "The change in Time: " + str(dt)
+    # pdControlZ = float(kp_z*errorInZPos +kd_z*derrorZ[1])
+    pdControlZ = float(kp_z*errorInZPos)
+    # print "move in x: " + str(pdControlX) + "\nmove in y: " + str(pdControlY) + "\nmove in z: " + str(pdControlZ)
+    print "move in z: " + str(pdControlZ)
+    # print "Our height is; " + str(height)
+    # print "The change in Time: " + str(dt)
     p1sec = rospy.Duration(0, 1000000)
     rospy.sleep(p1sec)
     control.moveXYZ(pdControlX, pdControlY, pdControlZ, height)
@@ -229,11 +235,12 @@ def processimage(cv_image,time):
     # cv2.imshow("HSV window", cv_hsv)
     # cv2.imwrite('block_hsv.jpg', cv_hsv)
     mask = cv2.inRange(cv_hsv, blueLower, blueUpper)
-    mask = cv2.erode(mask, None, iterations=2)
-    mask = cv2.dilate(mask, None, iterations=2)
     # cv2.imshow("Masked Window",mask)
     # cv2.waitKey(3)
-    frontcamargs = np.array([0,0,0,0,0,time])
+    mask = cv2.erode(mask, None, iterations=2)
+    mask = cv2.dilate(mask, None, iterations=2)
+
+    frontcamargs = np.array([320,180,0,0,0,time])
     cnts = cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)[-2]
     if len(cnts) > 0:  # only proceed if at least one contour was found
         c = max(cnts, key=cv2.contourArea)
@@ -249,7 +256,7 @@ def processimage(cv_image,time):
 
             # cv2.circle(cv_image, center, 5, (0, 0, 255), -1)
         # else:
-            frontcamargs = np.array([0,0,0,0,0,time])
+            frontcamargs = np.array(320,180,0,0,0,time)
         #     radius = -1
         #     center = np.array([-1,-1]) # didnt see
         # center = np.array([-1, -1])
@@ -261,7 +268,7 @@ def processimage(cv_image,time):
 
 class classargs():
     def __init__(self):
-        self.frontcamargs = np.array([0,0,0,0,0,0])
+        self.frontcamargs = np.array([320,180,0,0,0,0])
 
 
 class twistMatrix:
@@ -273,12 +280,14 @@ class twistMatrix:
         cmd = Twist()
         cmd.linear.x = 0.25*x
         cmd.linear.y = 0.25*y
-        cmd.linear.z = 0.25*z
+        cmd.linear.z = z
+
         cmd.angular.x = 0
         cmd.angular.y = 0
         cmd.angular.z = 0
-        if height < 150:
-            cmd.linear.z = 0.1
+
+        # if (height < 150) and (cmd.linear.z is not 0):
+        #      cmd.linear.z = 0.1
         self.movePub.publish(cmd)
 
     def autoHover(self):
@@ -417,7 +426,7 @@ if __name__ == '__main__':
     # image_sub = rospy.Subscriber("/ardrone/image_raw", Image, seeimage, me.marker)
 
     pubReset = rospy.Publisher("/ardrone/reset", stMsg.Empty, queue_size=1)
-    # pubTakeoff = rospy.Publisher("/ardrone/takeoff", stMsg.Empty, queue_size=1)
+    pubTakeoff = rospy.Publisher("/ardrone/takeoff", stMsg.Empty, queue_size=1)
     pubLand = rospy.Publisher("/ardrone/land", stMsg.Empty, queue_size=1)
     pubCmd = rospy.Publisher("/cmd_vel", Twist, queue_size=6)
     EmptyMessage = stMsg.Empty()
@@ -433,16 +442,16 @@ if __name__ == '__main__':
     rospy.sleep(rospy.Duration(1))
     control.hoverNoAuto()
     rospy.sleep(rospy.Duration(3))
-    control.moveXYZ(0,0,0.1,160) # increase hover height to widen field of view
+    control.moveXYZ(0,0,0.4,160) # increase hover height to widen field of view
     rospy.sleep(rospy.Duration(1))
 
     # while not rospy.is_shutdown():
-    horObPos = np.array([0,0])
+    horObPos = np.array([320,180])
     horObTime = rospy.get_time()
     previousMarker = np.array([500, 500])
     prevTime = getattr(me.marker, 'time')
-    prevHorTime = prevTime
-    prevHorOb = 500
+    prevHorTime = rospy.get_time()
+    prevHorOb = np.array([320,180])
     previousMarkerObject = np.array([previousMarker, prevTime, prevHorOb, prevHorTime])
     mycounter = 0
     print "lets roollll"
@@ -458,11 +467,12 @@ if __name__ == '__main__':
             if me.markercount is 1:
                 thisfunction = followImage(getattr(me.marker, 'cvec'), getattr(me.marker, 'dist'),getattr(me.marker, 'time'),
                                            horObPos, horObTime, previousMarkerObject)
-                mycounter += 1
+                # mycounter += 1
                 previousMarkerObject = thisfunction
                 # rospy.spin()
             else:
                 control.hoverNoAuto()
-        except:
-            control.land(pubLand)
-            this.kill()
+        except Exception as e:
+            print e
+            # control.land(pubLand)
+            # this.kill()
