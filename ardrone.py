@@ -144,20 +144,20 @@ def drawmarker(rows,cols,marker):
     return rect
 
 
-
-
 # takes in [x, y] coordinates of marker, and executes a moveForward or moveBack based on error in position
-def followImage(marker, height, time,horobpos, horobtime, prevparam):
+def followImage(marker, height, time,horobpos, horobtime, prevparam, integratedError):
     previouspos = prevparam[0]
     previoustime = prevparam[1]
     prevhorobpos = prevparam[2]
     prevhorobtime = prevparam[3]
 
+
     center = np.array([500., 500.])
     kp = 1/8000.
     kd = 0.00075
+    ki = 1/2000
 
-    kp_z = 1/500.
+    kp_z = 1./500
     kd_z = 0.0
 
     errorInZPos = float(180-horobpos[1])
@@ -175,25 +175,26 @@ def followImage(marker, height, time,horobpos, horobtime, prevparam):
 
     # dtZ = (horobtime - prevhorobtime)
     dt = (time - previoustime)
-    # errorNow - prevError divided by the time
-    derror = (previouspos - marker)/dt
-    # derrorZ = (prevhorobpos-horobpos)/dtZ
+    if dt > 0:
+        # errorNow - prevError divided by the time
+        derror = (previouspos - marker)/dt
+        # derrorZ = (prevhorobpos-horobpos)/dtZ
 
-    if math.isnan(derror[0]):
-        derror = [0., 0.]
+        if math.isnan(derror[0]):
+            derror = [0., 0.]
     # if math.isnan(derrorZ[0]):
     #     derrorZ =0
-    pdControlX = float(kp*errorInXPos + kd*derror[1])
-    pdControlY = float(kp*errorInYPos + kd*derror[0])
-    # pdControlZ = float(kp_z*errorInZPos +kd_z*derrorZ[1])
-    pdControlZ = float(kp_z*errorInZPos)
+        pidControlX = float(kp*errorInXPos + kd*derror[1] + ki*integratedError[1])
+        pidControlY = float(kp*errorInYPos + kd*derror[0] + ki*integratedError[0])
+        # pdControlZ = float(kp_z*errorInZPos +kd_z*derrorZ[1])
+        pdControlZ = float(kp_z*errorInZPos)
     # print "move in x: " + str(pdControlX) + "\nmove in y: " + str(pdControlY) + "\nmove in z: " + str(pdControlZ)
-    print "move in z: " + str(pdControlZ)
-    # print "Our height is; " + str(height)
-    # print "The change in Time: " + str(dt)
-    p1sec = rospy.Duration(0, 10000)
-    rospy.sleep(p1sec)
-    control.moveXYZ(pdControlX, pdControlY, pdControlZ, height)
+        print "move in z: " + str(pdControlZ)
+        # print "Our height is; " + str(height)
+        # print "The change in Time: " + str(dt)
+        p1sec = rospy.Duration(0, 1000)
+        rospy.sleep(p1sec)
+        control.moveXYZ(pidControlX, pidControlY, pdControlZ, height)
     return np.array([marker, time,horobpos,horobtime]) # return current values to use as previous values
 
 
@@ -423,7 +424,7 @@ if __name__ == '__main__':
     # radiusblue = -1
     # circle = np.array([-1,-1])
 
-    image_sub = rospy.Subscriber("/ardrone/image_raw", Image, frontcam.seeimage, seeimageargs)
+    image_sub = rospy.Subscriber("/ardrone/front/image_raw", Image, frontcam.seeimage, seeimageargs)
 
     # image_sub = rospy.Subscriber("/ardrone/image_raw", Image, seeimage, me.marker)
 
@@ -444,7 +445,7 @@ if __name__ == '__main__':
     rospy.sleep(rospy.Duration(1))
     control.hoverNoAuto()
     rospy.sleep(rospy.Duration(3))
-    control.moveXYZ(0,0,0.4,160) # increase hover height to widen field of view
+    control.moveXYZ(0,0,0.1,160) # increase hover height to widen field of view
     rospy.sleep(rospy.Duration(1))
 
     # while not rospy.is_shutdown():
@@ -455,26 +456,37 @@ if __name__ == '__main__':
     prevHorTime = rospy.get_time()
     prevHorOb = np.array([320,180])
     previousMarkerObject = np.array([previousMarker, prevTime, prevHorOb, prevHorTime])
-    mycounter = 0
+    integratedTime = np.zeros(20)
+    integratedError = np.zeros([20,2])
+    integratorCounter = 0
     print "lets roollll"
     while 1:
         try:
             if frontcam.cv_image is not -1:
-                seeimageargs.frontcamargs = processimage(frontcam.cv_image,frontcam.timefront)
-                horObPos = seeimageargs.frontcamargs[0:2]
-                horObTime = seeimageargs.frontcamargs[5]
+                 # seeimageargs.frontcamargs = processimage(frontcam.cv_image,frontcam.timefront)
+                 horObPos = seeimageargs.frontcamargs[0:2]
+                 horObTime = seeimageargs.frontcamargs[5]
 
                 # print 'processed image' + str(frontcamargs)
 
             if me.markercount is 1:
-                thisfunction = followImage(getattr(me.marker, 'cvec'), getattr(me.marker, 'dist'),getattr(me.marker, 'time'),
-                                           horObPos, horObTime, previousMarkerObject)
+                timeNow = getattr(me.marker, 'time')
+                posNow = getattr(me.marker, 'cvec') # [x, y]
+                distNow = getattr(me.marker, 'dist')
+                if integratorCounter == 20:
+                    integratorCounter = 0
+                integratedTime[integratorCounter] = timeNow - previousMarkerObject[1] # the dt
+                integratedError[integratorCounter] = posNow - previousMarkerObject[0] # the dr, [dx, dy]
+                integratorCounter += 1
+                totalIntegratedError =np.dot(integratedTime, integratedError)
+                thisfunction = followImage(posNow, distNow,timeNow,
+                                           horObPos, horObTime, previousMarkerObject, totalIntegratedError)
                 # mycounter += 1
                 previousMarkerObject = thisfunction
                 # rospy.spin()
             else:
                 control.hoverNoAuto()
         except Exception as e:
-            print e
+             print e
             # control.land(pubLand)
             # this.kill()
