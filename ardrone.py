@@ -154,10 +154,10 @@ def followImage(marker, height, time,horobpos, horobtime, prevparam):
     prevhorobtime = prevparam[3]
 
     center = np.array([500., 500.])
-    kp = 1/1500.
-    kd = 0.03
+    kp = 1/8000.
+    kd = 0.00075
 
-    kp_z = 1/1000.
+    kp_z = 1/500.
     kd_z = 0.0
 
     errorInZPos = float(180-horobpos[1])
@@ -191,7 +191,7 @@ def followImage(marker, height, time,horobpos, horobtime, prevparam):
     print "move in z: " + str(pdControlZ)
     # print "Our height is; " + str(height)
     # print "The change in Time: " + str(dt)
-    p1sec = rospy.Duration(0, 1000000)
+    p1sec = rospy.Duration(0, 10000)
     rospy.sleep(p1sec)
     control.moveXYZ(pdControlX, pdControlY, pdControlZ, height)
     return np.array([marker, time,horobpos,horobtime]) # return current values to use as previous values
@@ -278,16 +278,18 @@ class twistMatrix:
 
     def moveXYZ(self, x, y, z, height):
         cmd = Twist()
-        cmd.linear.x = 0.25*x
-        cmd.linear.y = 0.25*y
+        cmd.linear.x = x
+        cmd.linear.y = y
         cmd.linear.z = z
 
         cmd.angular.x = 0
         cmd.angular.y = 0
         cmd.angular.z = 0
 
-        # if (height < 150) and (cmd.linear.z is not 0):
-        #      cmd.linear.z = 0.1
+        if (height < 150):
+             cmd.linear.z = 0.1
+        elif (height > 250):
+            cmd.linear.z = -0.2
         self.movePub.publish(cmd)
 
     def autoHover(self):
