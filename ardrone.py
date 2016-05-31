@@ -242,6 +242,22 @@ class analysefront():
                 # cv2.waitKey(1)
                 # # cv2.imshow("compare1",train)
 
+            # src_pts = np.float32([ kp1[m.queryIdx].pt for m in match10]).reshape(-1,1,2)
+            # dst_pts = np.float32([ kp2[m.trainIdx].pt for m in match10]).reshape(-1,1,2)
+            # M,mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC,5.0)
+            # matchesMask = mask.ravel().tolist()
+            #
+            # src_int = totuple(np.int32([src_pts]).reshape(-1,2))
+            # dstint = np.int32(dst_pts).reshape(-1,2)
+            # points = totuple(dstint)
+            # for i in points:
+            #     cv2.circle(imgcopy,i,2,(255,0,0),-1)
+            # for i in src_int:
+            #     cv2.circle(self.cv_image,i,2,(255,0,0),-1)
+            # cv2.imshow("compare",imgcopy)
+            # cv2.waitKey(1)
+            # cv2.imshow("compare1",self.cv_image)
+            # cv2.waitKey(1)
 
                 size = imgcopy.shape
                 bareim = np.zeros(size[:2],np.uint8)
@@ -270,6 +286,32 @@ class analysefront():
                 pass
                 # cv2.imshow("Window",self.cv_image)
                 # cv2.waitKey(1)
+            h,w = Trainimg.shape
+            pts = np.float32([ [0,0],[0,h-1],[w-1,h-1],[w-1,0] ]).reshape(-1,1,2)
+            # centre = np.float32([ h/2,w/2 ]).reshape(-1,1,2)
+            # ptstup = totuple(pts)
+            # center = np.float32([h/2,w/2]).reshape(1,1,2)
+
+            dst = cv2.perspectiveTransform(pts,M)
+            # dstint = np.int32(dst)
+            # edges = dst.reshape(-1,2)
+            cv2.polylines(imgcopy,np.int32(dst),True,(0,0,255),3,cv2.CV_AA)
+            # centerim = totuple(dst.reshape(2))
+            # cv2.circle(imgcopy,centerim,2,(0,0,255),3)
+
+            cv2.imshow("Window",imgcopy)
+            cv2.waitKey(3)
+
+
+            # Draw first 10 matches.
+            # img3 = cv2.drawMatches(Trainimg,kp1,self.cv_image,kp2,matches[:10], flags=2)
+
+            # plt.imshow(img3),plt.show()
+            # (self.arguments,dis_image,self.new) = processimage(self.cv_image,self.timefront)
+            # cv2.imshow("Image Window",dis_image)
+            # cv2.imshow("Image Window",self.cv_image)
+
+            # cv2.waitKey(1)
         except CvBridgeError as e:
             print(e)
         # if me.markercount == 1:  # for bottom camera

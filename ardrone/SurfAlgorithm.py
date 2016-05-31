@@ -28,6 +28,7 @@ imgcopy = cv2.imread('/home/astrochick/Documents/projects/Train_mandalas.jpg',1)
 # Initiate SIFT detector
 # orb = cv2.ORB(nfeatures=50,scaleFactor=1.2,nlevels=15,edgeThreshold=0,WTA_K=2,patchSize=31)
 orb = cv2.ORB()
+
 # find the keypoints and descriptors with SIFT
 kp1, des1 = orb.detectAndCompute(train,None)
 kp2, des2 = orb.detectAndCompute(imgcopy,None)
@@ -45,13 +46,13 @@ search_params = dict(checks=50)
 flann = cv2.FlannBasedMatcher(index_params,search_params)
 good = flann.knnMatch(des1,des2,k=4)
 # matchesMask = [[0,0] for i in xrange(len(matches))]
-# good = []
-# for m_n in matches:
-#     if len(m_n) != 2:
-#         continue
-#     (m,n) = m_n
-#     if m.distance < 0.75*n.distance:
-#         good.append(m)
+good = []
+for m_n in matches:
+    if len(m_n) != 2:
+        continue
+    (m,n) = m_n
+    if m.distance < 0.75*n.distance:
+        good.append(m)
 
 # Apply ratio test
 # good = []
