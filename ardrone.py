@@ -127,6 +127,11 @@ class createrect():
         pt4 = -1
         center = -1
 
+def totuple(a):
+    try:
+        return tuple(totuple(i) for i in a)
+    except TypeError:
+        return a
 
 def drawmarker(rows,cols,marker):
     # assume height and width doesnt need to /1000* cols||rows
@@ -216,24 +221,77 @@ class analysefront():
         self.timefront = rospy.get_time()
         self.new = 0
         self.arguments = np.array([320,180,0,0,0,self.timefront])
+        self.orb = cv2.ORB()  # Initiate SIFT detector
+        self.bf =  cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)   # create BFMatcher object
+
 
     def seeimage(self,ros_image):
         # arguments = objectim.frontcamargs
         self.new = 1
         try:
             self.cv_image = self.bridge.imgmsg_to_cv2(ros_image,"bgr8") #rgb
-            # imagecopy = self.bridge.imgmsg_to_cv2(ros_image,"bgr8") #rgb
+            imgcopy = self.bridge.imgmsg_to_cv2(ros_image,"bgr8")
+            # cv2.imshow("main",self.cv_image)
+            # cv2.imwrite('totrain.png',self.cv_image)
+            # cv2.waitKey(3)
             self.timefront = rospy.get_time()
-            # if arguments[2] > 0: # if there is a marker on the front camera
-            # cv2.circle(cv_image, (int(arguments[0]),int(arguments[1])), 5, (0, 0, 255), -1)
-            # cv2.circle(cv_image, (int(arguments[3]),int(arguments[4])), int(arguments[2]),(0, 255, 255), 2)
-            # cv2.imshow("Image window", cv_image)
-            # else:
-                # cv2.imshow("Image window",self.cv_image)
+
+            # find the keypoints and descriptors with SIFT
+            kp1, des1 = self.orb.detectAndCompute(Trainimg,None)
+            kp2, des2 = self.orb.detectAndCompute(imgcopy,None)
+
+            # Match descriptors.
+            matches = self.bf.match(des1,des2)
+
+            # Sort them in the order of their distance.
+            matches = sorted(matches, key = lambda x:x.distance)
+            # best 10
+            match50 = matches[:50]
+
+            # Apply ratio test
+            # good = []
+            # for i,m in enumerate(matches):
+            #     for j,n in enumerate(matches):
+            #         if (i is not j) and (m.distance < 0.75*n.distance):
+            #             good.append([m])
+
+            src_pts = np.float32([ kp1[m.queryIdx].pt for m in match50]).reshape(-1,1,2)
+            dst_pts = np.float32([ kp2[m.trainIdx].pt for m in match50]).reshape(-1,1,2)
+            dstint = np.int16(dst_pts).reshape(-1,2)
+            points = totuple(dstint)
+            for i in points:
+                cv2.circle(imgcopy,i,2,(255,0,0),-1)
+            # cv2.imshow("display points",imgcopy)
+            # cv2.waitKey(400)
+            M = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC,1.0)
+            # M = cv2.findHomography(src_pts, dst_pts)
+
+            # matchesMask = mask.ravel().tolist()
+
+            h,w = Trainimg.shape
+            # pts = np.float32([ [0,0],[0,h-1],[w-1,h-1],[w-1,0] ]).reshape(-1,1,2)
+            # centre = np.float32([ h/2,w/2 ]).reshape(-1,1,2)
+            # ptstup = totuple(pts)
+            center = np.float32([h/2,w/2]).reshape(1,1,2)
+            dst = cv2.perspectiveTransform(center,M[0])
+            # dstint = np.int32(dst)
+            # cv2.polylines(self.cv_image,dstint,True,255,3)
+            centerim = totuple(dst.reshape(2))
+            cv2.circle(imgcopy,centerim,2,(0,0,255),3)
+            #
+            # cv2.imshow("Window",imgcopy)
+            # cv2.waitKey(3)
+
+
+            # Draw first 10 matches.
+            # img3 = cv2.drawMatches(Trainimg,kp1,self.cv_image,kp2,matches[:10], flags=2)
+
+            # plt.imshow(img3),plt.show()
+            # (self.arguments,dis_image,self.new) = processimage(self.cv_image,self.timefront)
+            # cv2.imshow("Image Window",dis_image)
+            # cv2.imshow("Image Window",self.cv_image)
+
             # cv2.waitKey(1)
-            (self.arguments,dis_image,self.new) = processimage(self.cv_image,self.timefront)
-            cv2.imshow("Image Window",dis_image)
-            cv2.waitKey(1)
         except CvBridgeError as e:
             print(e)
         # if me.markercount == 1:  # for bottom camera
@@ -454,10 +512,8 @@ if __name__ == '__main__':
     me = BasicDroneController()  # should automatically call GetNavdata when something in received in subscriber
     subNavdata = rospy.Subscriber('/ardrone/navdata', dronemsgs.Navdata, me.GetNavdata)
     frontcam = analysefront()
-    # seeimageargs = classargs()
-    # centerblue = np.array([-1,-1])
-    # radiusblue = -1
-    # circle = np.array([-1,-1])
+
+    Trainimg = cv2.imread('totrain.png',0)
 
     image_sub = rospy.Subscriber("/ardrone/image_raw", Image, frontcam.seeimage)
 
