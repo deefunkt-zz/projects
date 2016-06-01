@@ -222,7 +222,17 @@ class analysefront():
         self.new = 0
         self.arguments = np.array([320,180,0,0,0,self.timefront])
         self.orb = cv2.ORB()  # Initiate SIFT detector
-        self.bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)   # create BFMatcher object
+        # self.bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)   # create BFMatcher object
+        FLANN_INDEX_LSH = 6
+        index_params= dict(algorithm = FLANN_INDEX_LSH,
+                   table_number = 12, # 12
+                   key_size = 12,     # 20
+                   multi_probe_level = 1) #2
+        search_params = dict(checks=100)
+        self.flann = cv2.FlannBasedMatcher(index_params,search_params)
+        # self.train = cv2.imread('/home/astrochick/Documents/projects/ardrone/Pictures/Train_check.jpg',1)          # queryImage
+        self.train = cv2.imread('/home/astrochick/Documents/projects/Train_busyBlue.jpg',1)          # queryImage
+        self.kp1, self.des1 = self.orb.detectAndCompute(self.train,None)
 
 
     def seeimage(self,ros_image):
@@ -233,73 +243,53 @@ class analysefront():
             imgcopy = self.bridge.imgmsg_to_cv2(ros_image,"bgr8")
             # cv2.imshow("main",self.cv_image)
             # cv2.waitKey(1)
-            # cv2.imwrite('totrain.png',self.cv_image)
+            # cv2.imwrite('Train_busyBlue.jpg',self.cv_image)
 
             self.timefront = rospy.get_time()
 
             # find the keypoints and descriptors with SIFT
-            kp1, des1 = self.orb.detectAndCompute(Trainimg,None)
             kp2, des2 = self.orb.detectAndCompute(imgcopy,None)
 
             # Match descriptors.
-            matches = self.bf.match(des1,des2)
+            matches = self.flann.knnMatch(self.des1,des2,k=2)
 
-            # Sort them in the order of their distance.
-            matches = sorted(matches, key = lambda x:x.distance)
-            # best 10
-            match10 = matches[:10]
+            good = []
+            for m_n in matches:
+                if len(m_n) != 2:
+                    continue
+                (m,n) = m_n
+                if m.distance < 0.75*n.distance:
+                    good.append(m)
+            if good.__len__() > 10:
+                src_pts = np.float32([self.kp1[m.queryIdx].pt for m in good]).reshape(-1,1,2)
+                dst_pts = np.float32([kp2[m.trainIdx].pt for m in good]).reshape(-1,1,2)
 
-            # Apply ratio test
-            # good = []
-            # for i,m in enumerate(matches):
-            #     for j,n in enumerate(matches):
-            #         if (i is not j) and (m.distance < 0.75*n.distance):
-            #             good.append([m])
+                size = imgcopy.shape
+                bareim = np.zeros(size[:2],np.uint8)
+                index = totuple(np.int32(dst_pts).reshape(-1,2))
+                for i in index:
+                    cv2.circle(bareim,i,5,(255),5)
+                # bareim = cv2.erode(bareim, None, iterations=2)
+                bareim = cv2.erode(bareim, cv2.MORPH_RECT, iterations=3)
+                cv2.imshow("mask",bareim)
+                cv2.waitKey(1)
+                cnts = cv2.findContours(bareim.copy(), cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)[-2]
+                center = np.array([0,0])
+                if len(cnts) > 0:  # only proceed if at least one contour was found
+                    c = max(cnts, key=cv2.contourArea)
+                    ((x, y), radius) = cv2.minEnclosingCircle(c)
+                    if radius > 5:
+                        M = cv2.moments(c)
+                        center[0] = int(M["m10"] / M["m00"])
+                        center[1] = int(M["m01"] / M["m00"])
+                        cv2.circle(imgcopy,tuple(center),3,(255,0,0),3)
 
-            src_pts = np.float32([ kp1[m.queryIdx].pt for m in match10]).reshape(-1,1,2)
-            dst_pts = np.float32([ kp2[m.trainIdx].pt for m in match10]).reshape(-1,1,2)
-            M,mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC,5.0)
-            matchesMask = mask.ravel().tolist()
-
-            src_int = totuple(np.int32([src_pts]).reshape(-1,2))
-            dstint = np.int32(dst_pts).reshape(-1,2)
-            points = totuple(dstint)
-            for i in points:
-                cv2.circle(imgcopy,i,2,(255,0,0),-1)
-            for i in src_int:
-                cv2.circle(self.cv_image,i,2,(255,0,0),-1)
-            cv2.imshow("compare",imgcopy)
-            cv2.waitKey(1)
-            cv2.imshow("compare1",self.cv_image)
-            cv2.waitKey(1)
-
-
-            h,w = Trainimg.shape
-            pts = np.float32([ [0,0],[0,h-1],[w-1,h-1],[w-1,0] ]).reshape(-1,1,2)
-            # centre = np.float32([ h/2,w/2 ]).reshape(-1,1,2)
-            # ptstup = totuple(pts)
-            # center = np.float32([h/2,w/2]).reshape(1,1,2)
-
-            dst = cv2.perspectiveTransform(pts,M)
-            # dstint = np.int32(dst)
-            # edges = dst.reshape(-1,2)
-            cv2.polylines(imgcopy,np.int32(dst),True,(0,0,255),3,cv2.CV_AA)
-            # centerim = totuple(dst.reshape(2))
-            # cv2.circle(imgcopy,centerim,2,(0,0,255),3)
-
-            cv2.imshow("Window",imgcopy)
-            cv2.waitKey(3)
-
-
-            # Draw first 10 matches.
-            # img3 = cv2.drawMatches(Trainimg,kp1,self.cv_image,kp2,matches[:10], flags=2)
-
-            # plt.imshow(img3),plt.show()
-            # (self.arguments,dis_image,self.new) = processimage(self.cv_image,self.timefront)
-            # cv2.imshow("Image Window",dis_image)
-            # cv2.imshow("Image Window",self.cv_image)
-
-            # cv2.waitKey(1)
+                # cv2.imshow("Window",imgcopy)
+                # cv2.waitKey(1)
+            else:
+                pass
+                # cv2.imshow("Window",self.cv_image)
+                # cv2.waitKey(1)
         except CvBridgeError as e:
             print(e)
         # if me.markercount == 1:  # for bottom camera
@@ -520,8 +510,6 @@ if __name__ == '__main__':
     me = BasicDroneController()  # should automatically call GetNavdata when something in received in subscriber
     subNavdata = rospy.Subscriber('/ardrone/navdata', dronemsgs.Navdata, me.GetNavdata)
     frontcam = analysefront()
-
-    Trainimg = cv2.imread('totrain.png',1) # load in colour
 
     image_sub = rospy.Subscriber("/ardrone/image_raw", Image, frontcam.seeimage)
 

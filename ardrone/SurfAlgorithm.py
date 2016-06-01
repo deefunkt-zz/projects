@@ -17,8 +17,8 @@ bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
 # train = cv2.imread('/home/astrochick/Documents/projects/Train1_Lyd.jpg',1)          # queryImage
 # imgcopy = cv2.imread('/home/astrochick/Documents/projects/Lyd1.jpg',1) # trainImage
 # imgcopy2 = cv2.imread('/home/astrochick/Documents/projects/Lyd1.jpg',1)
-train = cv2.imread('/home/astrochick/Documents/projects/ardrone/Pictures/Train_check.png',1)          # queryImage
-imgcopy = cv2.imread('/home/astrochick/Documents/projects/ardrone/Pictures/MewithMarker.jpg',1) # trainImage
+train = cv2.imread('/home/astrochick/Documents/projects/ardrone/Pictures/Train_check.jpg',1)          # queryImage
+imgcopy = cv2.imread('/home/astrochick/Documents/projects/ardrone/Pictures/check1.jpg',1) # trainImage
 # imgcopy2 = cv2.imread('/home/astrochick/Documents/projects/Lyd1.jpg',1)
 
 # img1cv = Bridge.imgmsg_to_cv2(img1ros,"bgr8")
@@ -58,16 +58,40 @@ for m_n in matches:
 # for m,n in matches:
 #     if m.distance < 0.75*n.distance:
 #         good.append([m])
-sets = matches[:50]
+# sets = matches[:50]
 src_pts = np.float32([ kp1[m.queryIdx].pt for m in good]).reshape(-1,1,2)
 dst_pts = np.float32([ kp2[m.trainIdx].pt for m in good]).reshape(-1,1,2)
-M,mask = cv2.findHomography(src_pts, dst_pts, 0)
-matchesMask = mask.ravel().tolist()
+size = imgcopy.shape
+bareim = np.zeros(size[:2],np.uint8)
+index = totuple(np.int32(dst_pts).reshape(-1,2))
+for i in index:
+    cv2.circle(bareim,i,5,(255),5)
+bareim = cv2.erode(bareim, None, iterations=2)
+bareim = cv2.dilate(bareim, None, iterations=2)
+cnts = cv2.findContours(bareim.copy(), cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)[-2]
+center = np.array([0,0])
+if len(cnts) > 0:  # only proceed if at least one contour was found
+    c = max(cnts, key=cv2.contourArea)
+    ((x, y), radius) = cv2.minEnclosingCircle(c)
+    M = cv2.moments(c)
+    center[0] = int(M["m10"] / M["m00"])
+    center[1] = int(M["m01"] / M["m00"])
+    cv2.circle(imgcopy,tuple(center),3,(255,0,0),3)
+cv2.imshow("window",imgcopy)
+cv2.waitKey(2000)
+
+
+while 1:
+    pass
+
+
+
+# M,mask = cv2.findHomography(src_pts, dst_pts, 0)
+# matchesMask = mask.ravel().tolist()
 
 src_int = totuple(np.int32([src_pts]).reshape(-1,2))
-dstint = np.int32(dst_pts).reshape(-1,2)
-points = totuple(dstint)
-for i in points:
+dst_int = totuple(np.int32(dst_pts)).reshape(-1,2)
+for i in dst_int:
     cv2.circle(imgcopy,i,2,(255,0,0),-1)
     # cv2.imshow("compare",imgcopy)
     # cv2.waitKey(1000)
@@ -89,6 +113,9 @@ for i in src_int:
 # cv2.imwrite('compare_que.png',imgcopy)
 # cv2.imwrite('compare_train.png',train)
 # cv2.waitKey(3000)
+
+
+
 
 h,w,d = train.shape
 pts = np.float32([ [0,0],[w-1,0],[w-1,h-1],[0,h-1] ]).reshape(1,-1,2)
