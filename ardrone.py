@@ -215,18 +215,18 @@ class analysefront():
             kp2, des2 = self.orb.detectAndCompute(imgcopy,None)
 
             # Match descriptors.
-            matches = self.flann.knnMatch(self.des1,des2,k=2)
+            matches = self.flann.knnMatch(self.des1,des2,k=4)
 
-            good = []
-            for m_n in matches:
-                if len(m_n) != 2:
-                    continue
-                (m,n) = m_n
-                if m.distance < 0.75*n.distance:
-                    good.append(m)
-            if good.__len__() > 10:
-                src_pts = np.float32([self.kp1[m.queryIdx].pt for m in good]).reshape(-1,1,2)
-                dst_pts = np.float32([kp2[m.trainIdx].pt for m in good]).reshape(-1,1,2)
+            # good = []
+            # for m_n in matches:
+            #     if len(m_n) != 2:
+            #         continue
+            #     (m,n) = m_n
+            #     if m.distance < 0.75*n.distance:
+            #         good.append(m)
+            if matches.__len__() > 10:
+                src_pts = np.float32([self.kp1[m.queryIdx].pt for m in matches]).reshape(-1,1,2)
+                dst_pts = np.float32([kp2[m.trainIdx].pt for m in matches]).reshape(-1,1,2)
 
                 # src_int = totuple(np.int32([src_pts]).reshape(-1,2))
                 # dst_int = totuple(np.int32([dst_pts]).reshape(-1,2))
@@ -279,7 +279,7 @@ class analysefront():
                         center[0] = int(M["m10"] / M["m00"])
                         center[1] = int(M["m01"] / M["m00"])
                         cv2.circle(imgcopy,tuple(center),3,(255,0,0),3)
-
+                #
                 # cv2.imshow("Window",imgcopy)
                 # cv2.waitKey(1)
             else:
