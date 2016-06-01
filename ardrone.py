@@ -227,8 +227,8 @@ class analysefront():
         index_params= dict(algorithm = FLANN_INDEX_LSH,
                    table_number = 12, # 12
                    key_size = 12,     # 20
-                   multi_probe_level = 1) #2
-        search_params = dict(checks=100)
+                   multi_probe_level = 0) #2
+        search_params = dict(checks=200)
         self.flann = cv2.FlannBasedMatcher(index_params,search_params)
         # self.train = cv2.imread('/home/astrochick/Documents/projects/ardrone/Pictures/Train_check.jpg',1)          # queryImage
         self.train = cv2.imread('/home/astrochick/Documents/projects/Train_busyBlue.jpg',1)          # queryImage
@@ -251,26 +251,27 @@ class analysefront():
             kp2, des2 = self.orb.detectAndCompute(imgcopy,None)
 
             # Match descriptors.
-            matches = self.flann.knnMatch(self.des1,des2,k=2)
+            matches = self.flann.knnMatch(self.des1,des2,k=4)
 
-            good = []
-            for m_n in matches:
-                if len(m_n) != 2:
-                    continue
-                (m,n) = m_n
-                if m.distance < 0.75*n.distance:
-                    good.append(m)
-            if good.__len__() > 10:
-                src_pts = np.float32([self.kp1[m.queryIdx].pt for m in good]).reshape(-1,1,2)
-                dst_pts = np.float32([kp2[m.trainIdx].pt for m in good]).reshape(-1,1,2)
+            # good = []
+            # for m_n in matches:
+            #     if len(m_n) != 2:
+            #         continue
+            #     (m,n) = m_n
+            #     if m.distance < 0.75*n.distance:
+            #         good.append(m)
+            if matches.__len__() > 10:
+                src_pts = np.float32([self.kp1[m.queryIdx].pt for m in matches]).reshape(-1,1,2)
+                dst_pts = np.float32([kp2[m.trainIdx].pt for m in matches]).reshape(-1,1,2)
 
                 size = imgcopy.shape
                 bareim = np.zeros(size[:2],np.uint8)
                 index = totuple(np.int32(dst_pts).reshape(-1,2))
                 for i in index:
-                    cv2.circle(bareim,i,5,(255),5)
+                    cv2.circle(bareim,i,2,(255),2)
                 # bareim = cv2.erode(bareim, None, iterations=2)
-                bareim = cv2.erode(bareim, cv2.MORPH_RECT, iterations=3)
+                # cv2.erode()
+                # cv2.erode(bareim,bareim, element=cv2.MORPH_RECT, iterations=3)
                 cv2.imshow("mask",bareim)
                 cv2.waitKey(1)
                 cnts = cv2.findContours(bareim.copy(), cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)[-2]
@@ -278,12 +279,12 @@ class analysefront():
                 if len(cnts) > 0:  # only proceed if at least one contour was found
                     c = max(cnts, key=cv2.contourArea)
                     ((x, y), radius) = cv2.minEnclosingCircle(c)
-                    if radius > 5:
+                    if radius > 8:
                         M = cv2.moments(c)
                         center[0] = int(M["m10"] / M["m00"])
                         center[1] = int(M["m01"] / M["m00"])
                         cv2.circle(imgcopy,tuple(center),3,(255,0,0),3)
-
+                #
                 # cv2.imshow("Window",imgcopy)
                 # cv2.waitKey(1)
             else:
