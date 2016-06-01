@@ -57,7 +57,7 @@ for m_n in matches:
 # good = []
 # for m,n in matches:
 #     if m.distance < 0.75*n.distance:
-#         good.append([m])
+#         good.append(m)
 # sets = matches[:50]
 src_pts = np.float32([ kp1[m.queryIdx].pt for m in good]).reshape(-1,1,2)
 dst_pts = np.float32([ kp2[m.trainIdx].pt for m in good]).reshape(-1,1,2)
@@ -81,8 +81,8 @@ cv2.imshow("window",imgcopy)
 cv2.waitKey(2000)
 
 
-while 1:
-    pass
+# while 1:
+#     pass
 
 
 
@@ -90,11 +90,11 @@ while 1:
 # matchesMask = mask.ravel().tolist()
 
 src_int = totuple(np.int32([src_pts]).reshape(-1,2))
-dst_int = totuple(np.int32(dst_pts)).reshape(-1,2)
+dst_int = totuple(np.int32([dst_pts]).reshape(-1,2))
 for i in dst_int:
     cv2.circle(imgcopy,i,2,(255,0,0),-1)
-    # cv2.imshow("compare",imgcopy)
-    # cv2.waitKey(1000)
+    cv2.imshow("compare",imgcopy)
+    cv2.waitKey(1000)
 for i in src_int:
     cv2.circle(train,i,2,(255,0,0),-1)
     # cv2.imshow("compare1",train)
