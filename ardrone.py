@@ -77,14 +77,14 @@ class BasicDroneController(object):
 
 class createmarker():
     def __init__(self):
-        cx = -1
-        cy = -1
-        cvec = np.array([0.,0.])
-        width = -1
-        height = -1
-        theta = -1.0
-        time = 0
-        dist = 0
+        self.cx = -1
+        self.cy = -1
+        self.cvec = np.array([0.,0.])
+        self.width = -1
+        self.height = -1
+        self.theta = -1.0
+        self.time = 0
+        self.dist = 0
 
 class createrect():
     def __init__(self):
@@ -189,21 +189,150 @@ class analysefront():
         self.cv_image = -1
         self.bridge = CvBridge()
         self.timefront = rospy.get_time()
+        self.new = 0
+        self.arguments = np.array([320,180,0,0,0,self.timefront])
+        self.orb = cv2.ORB()  # Initiate SIFT detector
+        # self.bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)   # create BFMatcher object
+        FLANN_INDEX_LSH = 6
+        index_params= dict(algorithm = FLANN_INDEX_LSH,
+                   table_number = 12, # 12
+                   key_size = 12,     # 20
+                   multi_probe_level = 0) #2
+        search_params = dict(checks=200)
+        self.flann = cv2.FlannBasedMatcher(index_params,search_params)
+        # self.train = cv2.imread('/home/astrochick/Documents/projects/ardrone/Pictures/Train_check.jpg',1)          # queryImage
+        self.train = cv2.imread('/home/astrochick/Documents/projects/Train_mandalas.jpg',1)          # queryImage
+        self.kp1, self.des1 = self.orb.detectAndCompute(self.train,None)
 
-    def seeimage(self,ros_image,objectim):
-        arguments = objectim.frontcamargs
+    def seeimage(self,ros_image):
+        # arguments = objectim.frontcamargs
+        self.new = 1
 
         try:
             self.cv_image = self.bridge.imgmsg_to_cv2(ros_image,"bgr8") #rgb
-            imagecopy = self.bridge.imgmsg_to_cv2(ros_image,"bgr8") #rgb
+            imgcopy = self.bridge.imgmsg_to_cv2(ros_image,"bgr8")
+            # cv2.imshow("main",self.cv_image)
+            # cv2.waitKey(1)
+            # cv2.imwrite('Train_mandalasfar.jpg',self.cv_image)
+
             self.timefront = rospy.get_time()
-            if arguments[2] > 0: # if there is a marker on the front camera
-                cv2.circle(imagecopy, (int(arguments[0]),int(arguments[1])), 5, (0, 0, 255), -1)
-                cv2.circle(imagecopy, (int(arguments[3]),int(arguments[4])), int(arguments[2]),(0, 255, 255), 2)
-                cv2.imshow("Image window", imagecopy)
+
+            # find the keypoints and descriptors with SIFT
+            kp2, des2 = self.orb.detectAndCompute(imgcopy,None)
+
+            # Match descriptors.
+            matches = self.flann.knnMatch(self.des1,des2,k=2)
+
+            good = []
+            for m_n in matches:
+                if len(m_n) != 2:
+                    continue
+                (m,n) = m_n
+                if m.distance < 0.75*n.distance:
+                    good.append(m)
+            if good.__len__() > 10:
+                src_pts = np.float32([self.kp1[m.queryIdx].pt for m in good]).reshape(-1,1,2)
+                dst_pts = np.float32([kp2[m.trainIdx].pt for m in good]).reshape(-1,1,2)
+
+                # src_int = totuple(np.int32([src_pts]).reshape(-1,2))
+                # dst_int = totuple(np.int32([dst_pts]).reshape(-1,2))
+                # for i in dst_int:
+                #     cv2.circle(imgcopy,i,2,(255,0,0),-1)
+                #     # cv2.imshow("compare",imgcopy)
+                #     # cv2.waitKey(1000)
+                # for i in src_int:
+                #     cv2.circle(self.train,i,2,(255,0,0),-1)
+                #     # cv2.imshow("compare1",train)
+                #     # cv2.waitKey(1000)
+                # cv2.imshow("compare",self.train)
+                # cv2.waitKey(1)
+                # # cv2.imshow("compare1",train)
+
+
+                # src_int = totuple(np.int32([src_pts]).reshape(-1,2))
+                # dst_int = totuple(np.int32([dst_pts]).reshape(-1,2))
+                # for i in dst_int:
+                #     cv2.circle(imgcopy,i,2,(255,0,0),-1)
+                #     # cv2.imshow("compare",imgcopy)
+                #     # cv2.waitKey(1000)
+                # for i in src_int:
+                #     cv2.circle(self.train,i,2,(255,0,0),-1)
+                #     # cv2.imshow("compare1",train)
+                #     # cv2.waitKey(1000)
+                # cv2.imshow("compare",self.train)
+                # cv2.waitKey(1)
+                # # cv2.imshow("compare1",train)
+
+            # src_pts = np.float32([ kp1[m.queryIdx].pt for m in match10]).reshape(-1,1,2)
+            # dst_pts = np.float32([ kp2[m.trainIdx].pt for m in match10]).reshape(-1,1,2)
+            # M,mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC,5.0)
+            # matchesMask = mask.ravel().tolist()
+            #
+            # src_int = totuple(np.int32([src_pts]).reshape(-1,2))
+            # dstint = np.int32(dst_pts).reshape(-1,2)
+            # points = totuple(dstint)
+            # for i in points:
+            #     cv2.circle(imgcopy,i,2,(255,0,0),-1)
+            # for i in src_int:
+            #     cv2.circle(self.cv_image,i,2,(255,0,0),-1)
+            # cv2.imshow("compare",imgcopy)
+            # cv2.waitKey(1)
+            # cv2.imshow("compare1",self.cv_image)
+            # cv2.waitKey(1)
+
+                size = imgcopy.shape
+                bareim = np.zeros(size[:2],np.uint8)
+                index = totuple(np.int32(dst_pts).reshape(-1,2))
+                for i in index:
+                    cv2.circle(bareim,i,2,(255),2)
+                # bareim = cv2.erode(bareim, None, iterations=2)
+                # cv2.erode()
+                # cv2.erode(bareim,bareim, element=cv2.MORPH_RECT, iterations=3)
+                cv2.imshow("mask",bareim)
+                cv2.waitKey(1)
+                cnts = cv2.findContours(bareim.copy(), cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)[-2]
+                center = np.array([0,0])
+                if len(cnts) > 0:  # only proceed if at least one contour was found
+                    c = max(cnts, key=cv2.contourArea)
+                    ((x, y), radius) = cv2.minEnclosingCircle(c)
+                    if radius > 8:
+                        M = cv2.moments(c)
+                        center[0] = int(M["m10"] / M["m00"])
+                        center[1] = int(M["m01"] / M["m00"])
+                        cv2.circle(imgcopy,tuple(center),3,(255,0,0),3)
+
+                # cv2.imshow("Window",imgcopy)
+                # cv2.waitKey(1)
             else:
-                cv2.imshow("Image window",self.cv_image)
-            cv2.waitKey(1)
+                pass
+                # cv2.imshow("Window",self.cv_image)
+                # cv2.waitKey(1)
+            h,w = Trainimg.shape
+            pts = np.float32([ [0,0],[0,h-1],[w-1,h-1],[w-1,0] ]).reshape(-1,1,2)
+            # centre = np.float32([ h/2,w/2 ]).reshape(-1,1,2)
+            # ptstup = totuple(pts)
+            # center = np.float32([h/2,w/2]).reshape(1,1,2)
+
+            dst = cv2.perspectiveTransform(pts,M)
+            # dstint = np.int32(dst)
+            # edges = dst.reshape(-1,2)
+            cv2.polylines(imgcopy,np.int32(dst),True,(0,0,255),3,cv2.CV_AA)
+            # centerim = totuple(dst.reshape(2))
+            # cv2.circle(imgcopy,centerim,2,(0,0,255),3)
+
+            cv2.imshow("Window",imgcopy)
+            cv2.waitKey(3)
+
+
+            # Draw first 10 matches.
+            # img3 = cv2.drawMatches(Trainimg,kp1,self.cv_image,kp2,matches[:10], flags=2)
+
+            # plt.imshow(img3),plt.show()
+            # (self.arguments,dis_image,self.new) = processimage(self.cv_image,self.timefront)
+            # cv2.imshow("Image Window",dis_image)
+            # cv2.imshow("Image Window",self.cv_image)
+
+            # cv2.waitKey(1)
         except CvBridgeError as e:
             print(e)
         # if me.markercount == 1:  # for bottom camera
@@ -239,18 +368,20 @@ def processimage(cv_image,time):
         frontcamargs[0] = int(M["m10"] / M["m00"])
         frontcamargs[1] = int(M["m01"] / M["m00"])
 
-        if frontcamargs[2] < 5: # only proceed if the radius meets a minimum size
-
-            # cv2.circle(cv_image, center, 5, (0, 0, 255), -1)
-        # else:
-            frontcamargs = np.array(320,180,0,0,0,time)
+        if frontcamargs[2] > 5: # only proceed if the radius meets a minimum size
+            cv2.circle(cv_image, (int(frontcamargs[0]),int(frontcamargs[1])), 5, (0, 0, 255), -1)
+            cv2.circle(cv_image, (int(frontcamargs[3]),int(frontcamargs[4])), int(frontcamargs[2]),(0, 255, 255), 2)
+            # cv2.imshow("Image window", cv_image)
+            # cv2.waitKey(1)
+            # frontcamargs = np.array(320,180,0,0,0,time)
         #     radius = -1
         #     center = np.array([-1,-1]) # didnt see
         # center = np.array([-1, -1])
         # radius = -1
         # circle = np.array([-1, -1])
     # return (center, radius, circle,time)
-    return frontcamargs
+    # return (frontcamargs,setflag)
+    return (frontcamargs,cv_image,setflag)
 
 
 class classargs():
@@ -405,9 +536,14 @@ if __name__ == '__main__':
     me = BasicDroneController()  # should automatically call GetNavdata when something in received in subscriber
     subNavdata = rospy.Subscriber('/ardrone/navdata', dronemsgs.Navdata, me.GetNavdata)
     frontcam = analysefront()
-    seeimageargs = classargs()
+    # seeimageargs = classargs()
+    # centerblue = np.array([-1,-1])
+    # radiusblue = -1
+    # circle = np.array([-1,-1])
 
-    image_sub = rospy.Subscriber("/ardrone/image_raw", Image, frontcam.seeimage, seeimageargs)
+    image_sub = rospy.Subscriber("/ardrone/image_raw", Image, frontcam.seeimage)
+
+    # image_sub = rospy.Subscriber("/ardrone/image_raw", Image, seeimage, me.marker)
 
     pubReset = rospy.Publisher("/ardrone/reset", stMsg.Empty, queue_size=1)
     pubTakeoff = rospy.Publisher("/ardrone/takeoff", stMsg.Empty, queue_size=1)
