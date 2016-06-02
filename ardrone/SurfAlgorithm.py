@@ -46,13 +46,13 @@ search_params = dict(checks=50)
 flann = cv2.FlannBasedMatcher(index_params,search_params)
 good = flann.knnMatch(des1,des2,k=4)
 # matchesMask = [[0,0] for i in xrange(len(matches))]
-good = []
-for m_n in matches:
-    if len(m_n) != 2:
-        continue
-    (m,n) = m_n
-    if m.distance < 0.75*n.distance:
-        good.append(m)
+# good = []
+# for m_n in matches:
+#     if len(m_n) != 2:
+#         continue
+#     (m,n) = m_n
+#     if m.distance < 0.75*n.distance:
+#         good.append(m)
 
 # Apply ratio test
 # good = []
