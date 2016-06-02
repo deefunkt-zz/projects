@@ -125,10 +125,13 @@ def followImage(marker, height, time,horobpos, horobtime, prevparam, integratedE
 
 
     center = np.array([500., 500.])
-    kp = 1/8000.
-    kd = 0.00075
+    kpx = 1/16000.
+    kpy = 1/9000.
+    kdx = 0.00045
+    kdy = 0.00080
     # kd = 0
-    ki = 1/48000000000. ## should be 10-6 * length of time over which error is accumulated (1/ (6 x 10_9))
+    kix = 1/48000000000. ## should be 10-6 * length of time over which error is accumulated (1/ (6 x 10_9))
+    kiy = 1/27000000000.
     rotZ = 0
     kp_z = 1./500
     kd_z = 0.0
@@ -137,6 +140,7 @@ def followImage(marker, height, time,horobpos, horobtime, prevparam, integratedE
     errorInZPos = float(180-horobpos[1])
     errorInXPos = float((500 - marker[1]))  # since the errors in camera image and drone reference are inverted, we use
     errorInYPos = float((500 - marker[0]))  # the opposite vector elements in marker[]
+
     # plt.figure(1)
     # plt.subplot(211)
     # plt.scatter(counter,errorInXPos)
@@ -157,8 +161,12 @@ def followImage(marker, height, time,horobpos, horobtime, prevparam, integratedE
             derror = [0., 0.]
     # if math.isnan(derrorZ[0]):
     #     derrorZ =0
-        pidControlX = float(kp*errorInXPos + kd*derror[1] + ki*integratedError[1])
-        pidControlY = float(kp*errorInYPos + kd*derror[0] + ki*integratedError[0])
+        pidControlX = float(kpx*errorInXPos + kdx*derror[1] + kix*integratedError[1])
+        # if (abs(errorInXPos) <= 50):
+        #     pidControlX = 0.
+        pidControlY = float(kpy*errorInYPos + kdy*derror[0] + kiy*integratedError[0])
+        # if (abs(errorInYPos) <= 50):
+        #     pidControlY = 0.
         # pdControlZ = float(kp_z*errorInZPos +kd_z*derrorZ[1])
         pdControlZ = float(kp_z*errorInZPos)
         # print "Our height is; " + str(height)
@@ -170,9 +178,9 @@ def followImage(marker, height, time,horobpos, horobtime, prevparam, integratedE
         p1sec = rospy.Duration(0, 1000000)
         rospy.sleep(p1sec)
         #print "X: " + str(pidControlX) + "         Y:  " + str(pidControlY)
-        if (pidControlX > 0.1 or pidControlY > 0.1):
-            print "XK: " + str(kp*errorInXPos) + " XD: " + str(kd*derror[1]) +" XI: " + str(ki*integratedError[1])
-            print "YK: " + str(kp * errorInYPos) + " YD: " + str(kd * derror[0]) + " YI: " + str(ki * integratedError[0])
+        # if (pidControlX > 0.1 or pidControlY > 0.1):
+            # print "XK: " + str(kp*errorInXPos) + " XD: " + str(kd*derror[1]) +" XI: " + str(ki*integratedError[1])
+            # print "YK: " + str(kp * errorInYPos) + " YD: " + str(kd * derror[0]) + " YI: " + str(ki * integratedError[0])
     return np.array([marker, time,horobpos,horobtime,pidControlX,pidControlY]) # return current values to use as previous values
 
 
@@ -437,8 +445,8 @@ if __name__ == '__main__':
     integratedError = np.zeros([100,2])
     integratorCounter = 0
     myTime = rospy.get_time()
-    errorFile = open('logErrorsfreshimg.txt', 'a')
-    timeFile = open('logTimesdfreshimg.txt', 'a')
+    errorFile = open('logErrorskdxy.txt', 'a')
+    timeFile = open('logTimesdkdxy.txt', 'a')
     print "GET TO THE CHOPPAAAA!!!!"
     while 1:
         sinceMarker = (rospy.get_time() - myTime)
@@ -453,6 +461,10 @@ if __name__ == '__main__':
                     timeNow = getattr(me.marker, 'time')
                     myTime = rospy.get_time()
                     posNow = getattr(me.marker, 'cvec') # [x, y]
+                    if (450 < posNow[0] < 550):
+                        posNow[0] = 500
+                    if (450 < posNow[1] < 550):
+                        posNow[1] = 500
                     distNow = getattr(me.marker, 'dist')
                     if integratorCounter == 100:
                         integratorCounter = 0

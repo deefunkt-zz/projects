@@ -1,8 +1,8 @@
 clear;
 close all;
 tic
-errorfile = fopen('./Logs/logErrorsdelay1MKI12.txt','r');
-timefile = fopen('./Logs/logTimesdelay1MKI12.txt','r');
+errorfile = fopen('./logErrorskdxy.txt','r');
+timefile = fopen('./logTimesdkdxy.txt','r');
 actualErrors = [0, 0];
 errors = textscan(errorfile,'%s','Delimiter',']/n[');
 times  = textscan(timefile,'%f','Delimiter','/n');
@@ -21,9 +21,9 @@ pltlength = floor((j/2)) - 1000;
 tic
 fclose('all');
 figure(1) 
-plot(timeVector(2:pltlength), actualErrors(2:pltlength,1),'og-');
+plot(1e-10.*(timeVector(2:pltlength)), actualErrors(2:pltlength,1),'og-');
 hold on;
-plot(timeVector(2:pltlength), actualErrors(2:pltlength,2),'or-');
+plot(1e-10.*(timeVector(2:pltlength)), actualErrors(2:pltlength,2),'or-');
 legend('errors in X','errors in Y');
 toc
 
