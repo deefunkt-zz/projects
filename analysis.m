@@ -1,8 +1,8 @@
 clear;
 close all;
 tic
-errorfile = fopen('./Logs/logErrors4delay100k.txt','r');
-timefile = fopen('./Logs/logTimes4delay100k.txt','r');
+errorfile = fopen('./Logs/logErrorsdelay1MKI12.txt','r');
+timefile = fopen('./Logs/logTimesdelay1MKI12.txt','r');
 actualErrors = [0, 0];
 errors = textscan(errorfile,'%s','Delimiter',']/n[');
 times  = textscan(timefile,'%f','Delimiter','/n');
@@ -25,4 +25,10 @@ plot(timeVector(2:pltlength), actualErrors(2:pltlength,1),'og-');
 hold on;
 plot(timeVector(2:pltlength), actualErrors(2:pltlength,2),'or-');
 legend('errors in X','errors in Y');
+toc
+
+tic
+errorvector = sqrt(actualErrors(:,1).^2 + actualErrors(:,2).^2);
+figure(2)
+plot(timeVector(2:pltlength),errorvector(2:pltlength));
 toc
