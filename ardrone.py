@@ -94,11 +94,6 @@ class createrect():
         pt4 = -1
         center = -1
 
-def totuple(a):
-    try:
-        return tuple(totuple(i) for i in a)
-    except TypeError:
-        return a
 
 def drawmarker(rows,cols,marker):
     # assume height and width doesnt need to /1000* cols||rows
@@ -133,7 +128,7 @@ def followImage(marker, height, time,horobpos, horobtime, prevparam, integratedE
     kp = 1/8000.
     kd = 0.00075
     # kd = 0
-    ki = 1/9000000000. ## should be 10-6 * length of time over which error is accumulated (1/ (6 x 10_9))
+    ki = 1/48000000000. ## should be 10-6 * length of time over which error is accumulated (1/ (6 x 10_9))
     rotZ = 0
     kp_z = 1./500
     kd_z = 0.0
@@ -168,13 +163,16 @@ def followImage(marker, height, time,horobpos, horobtime, prevparam, integratedE
         pdControlZ = float(kp_z*errorInZPos)
         # print "Our height is; " + str(height)
         # print "The change in Time: " + str(dt)
-        p1sec = rospy.Duration(0, 10000)
-        rospy.sleep(p1sec)
         # if ((errorInYPos < 50) and (errorInXPos < 50) and (pidControlX < 0.02) and (pidControlY < 0.02)):     #used to test rotation while hovering over roundel
         #     rotZ = 0.3
         #     print "rotate"
         control.moveXYZ(pidControlX, pidControlY, pdControlZ,rotZ,height)
-        print "X: " + str(pidControlX) + "         Y:  " + str(pidControlY)
+        p1sec = rospy.Duration(0, 1000000)
+        rospy.sleep(p1sec)
+        #print "X: " + str(pidControlX) + "         Y:  " + str(pidControlY)
+        if (pidControlX > 0.1 or pidControlY > 0.1):
+            print "XK: " + str(kp*errorInXPos) + " XD: " + str(kd*derror[1]) +" XI: " + str(ki*integratedError[1])
+            print "YK: " + str(kp * errorInYPos) + " YD: " + str(kd * derror[0]) + " YI: " + str(ki * integratedError[0])
     return np.array([marker, time,horobpos,horobtime,pidControlX,pidControlY]) # return current values to use as previous values
 
 
@@ -198,10 +196,10 @@ class analysefront():
         self.train = cv2.imread('/home/astrochick/Documents/projects/Train_mandalas.jpg',1)          # queryImage
         self.kp1, self.des1 = self.orb.detectAndCompute(self.train,None)
 
-
     def seeimage(self,ros_image):
         # arguments = objectim.frontcamargs
         self.new = 1
+
         try:
             self.cv_image = self.bridge.imgmsg_to_cv2(ros_image,"bgr8") #rgb
             imgcopy = self.bridge.imgmsg_to_cv2(ros_image,"bgr8")
@@ -341,7 +339,6 @@ class analysefront():
 
 
 def processimage(cv_image,time):
-    setflag = 0
     cv_hsv = cv2.cvtColor(cv_image,cv2.COLOR_BGR2HSV)
     # cv2.imshow("HSV window", cv_hsv)
     # cv2.imwrite('block_hsv.jpg', cv_hsv)
@@ -572,40 +569,45 @@ if __name__ == '__main__':
     prevHorOb = np.array([320,180])
     previousMarkerObject = np.array([previousMarker, prevTime, prevHorOb, prevHorTime,0.,0.])
     thisfunction = previousMarkerObject
-    integratedTime = np.zeros(200)
-    integratedError = np.zeros([200,2])
+    integratedTime = np.zeros(100)
+    integratedError = np.zeros([100,2])
     integratorCounter = 0
     myTime = rospy.get_time()
-    errorFile = open('logErrors4delay10kKI19.txt', 'a')
-    timeFile = open('logTimes4delay10kKI19.txt', 'a')
+    errorFile = open('logErrorsfreshimg.txt', 'a')
+    timeFile = open('logTimesdfreshimg.txt', 'a')
     print "GET TO THE CHOPPAAAA!!!!"
     while 1:
         sinceMarker = (rospy.get_time() - myTime)
         try:
             if frontcam.cv_image is not -1:
                  # seeimageargs.frontcamargs = processimage(frontcam.cv_image,frontcam.timefront)
-                 horObPos = frontcam.arguments[0:2]
-                 horObTime = frontcam.arguments[5]
-            if me.markercount is 1:
-                timeNow = getattr(me.marker, 'time')
-                myTime = rospy.get_time()
-                posNow = getattr(me.marker, 'cvec') # [x, y]
-                distNow = getattr(me.marker, 'dist')
-                if integratorCounter == 200:
-                    integratorCounter = 0
-                integratedTime[integratorCounter] = timeNow - previousMarkerObject[1] # the dt
-                integratedError[integratorCounter] = np.array([500, 500]) - posNow # the dr, [dx, dy]
-                errorFile.write(str(integratedError[integratorCounter]) + '\n')
-                timeFile.write(str(myTime) + '\n')
-                integratorCounter += 1
-                totalIntegratedError =np.dot(integratedTime, integratedError)
-                thisfunction = followImage(posNow, distNow,timeNow,
-                                           horObPos, horObTime, previousMarkerObject, totalIntegratedError)
-                previousMarkerObject = thisfunction
+                 horObPos = seeimageargs.frontcamargs[0:2]
+                 horObTime = seeimageargs.frontcamargs[5]
+            if (me.markercount == 1):
+                timeNowcheck = getattr(me.marker,'time')
+                if (timeNowcheck != timeNow):
+                    timeNow = getattr(me.marker, 'time')
+                    myTime = rospy.get_time()
+                    posNow = getattr(me.marker, 'cvec') # [x, y]
+                    distNow = getattr(me.marker, 'dist')
+                    if integratorCounter == 100:
+                        integratorCounter = 0
+                    integratedTime[integratorCounter] = timeNow - previousMarkerObject[1] # the dt
+                    integratedError[integratorCounter] = np.array([500, 500]) - posNow # the dr, [dx, dy]
+                    errorFile.write(str(integratedError[integratorCounter]) + '\n')
+                    timeFile.write(str(myTime) + '\n')
+                    integratorCounter += 1
+                    totalIntegratedError =np.dot(integratedTime, integratedError)
+                    thisfunction = followImage(posNow, distNow,timeNow,
+                                               horObPos, horObTime, previousMarkerObject, totalIntegratedError)
+                    previousMarkerObject = thisfunction
 
             #IF the drone loses the marker, keep the previous movement command for 1 sec in attempt
             # to re-acquire. if 1 sec passed, skip this block and hover
             elif (sinceMarker < math.pow(10, 1)):
+                integratedTime = np.zeros(100)
+                integratedError = np.zeros([100, 2])
+                integratorCounter = 0
                 cmd = Twist()
                 cmd.linear.z = 0
                 cmd.linear.x = previousMarkerObject[4]
@@ -613,16 +615,17 @@ if __name__ == '__main__':
                 cmd.angular.x = 0
                 cmd.angular.y = 0
                 cmd.angular.z = 0
-                print " Marker Lost.........X: " + str(previousMarkerObject[4]) + "      Y: " + str(previousMarkerObject[5])
+                #print " Marker Lost.........X: " + str(previousMarkerObject[4]) + "      Y: " + str(previousMarkerObject[5])
                 pubCmd.publish(cmd)
-                # rospy.sleep(rospy.Duration(1))
+                #rospy.sleep(rospy.Duration(1))
             elif sinceMarker > 20:
-                errorFile.close()
-                timeFile.close()
+                 errorFile.close()
+                 timeFile.close()
 
             else:
                 control.hoverNoAuto()
         except Exception as e:
-             print e
-            # control.land(pubLand)
+            print e
+            control.land(pubLand)
+            print "landing"
             # this.kill()
