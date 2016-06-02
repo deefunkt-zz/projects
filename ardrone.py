@@ -50,6 +50,11 @@ def initdrone():
     except RuntimeError:
         print('invalid launch')
 
+def totuple(a):
+    try:
+        return tuple(totuple(i) for i in a)
+    except TypeError:
+        return a
 
 class BasicDroneController(object):
     def __init__(self):
@@ -132,12 +137,15 @@ def followImage(marker, height, time,horobpos, horobtime, prevparam, integratedE
     # kd = 0
     kix = 1/48000000000. ## should be 10-6 * length of time over which error is accumulated (1/ (6 x 10_9))
     kiy = 1/27000000000.
-    rotZ = 0
+    pidControlrotZ = 0.
     kp_z = 1./500
     kd_z = 0.0
+    kp_Rot = 1./500
     pidControlX = 0.
     pidControlY = 0.
     errorInZPos = float(180-horobpos[1])
+    print str(horobpos[1])
+    # errorInZRot = float(320 - horobpos[0])
     errorInXPos = float((500 - marker[1]))  # since the errors in camera image and drone reference are inverted, we use
     errorInYPos = float((500 - marker[0]))  # the opposite vector elements in marker[]
 
@@ -162,19 +170,22 @@ def followImage(marker, height, time,horobpos, horobtime, prevparam, integratedE
     # if math.isnan(derrorZ[0]):
     #     derrorZ =0
         pidControlX = float(kpx*errorInXPos + kdx*derror[1] + kix*integratedError[1])
-        # if (abs(errorInXPos) <= 50):
-        #     pidControlX = 0.
+        if (abs(errorInXPos) <= 50):
+            pidControlX = 0.
         pidControlY = float(kpy*errorInYPos + kdy*derror[0] + kiy*integratedError[0])
-        # if (abs(errorInYPos) <= 50):
-        #     pidControlY = 0.
+        if (abs(errorInYPos) <= 50):
+            pidControlY = 0.
         # pdControlZ = float(kp_z*errorInZPos +kd_z*derrorZ[1])
         pdControlZ = float(kp_z*errorInZPos)
+        if (abs(pdControlZ) > 0.01):
+            print pdControlZ
+        # pidControlrotZ = float(kp_Rot*errorInZRot)
         # print "Our height is; " + str(height)
         # print "The change in Time: " + str(dt)
         # if ((errorInYPos < 50) and (errorInXPos < 50) and (pidControlX < 0.02) and (pidControlY < 0.02)):     #used to test rotation while hovering over roundel
         #     rotZ = 0.3
         #     print "rotate"
-        control.moveXYZ(pidControlX, pidControlY, pdControlZ,rotZ,height)
+        control.moveXYZ(pidControlX, pidControlY, pdControlZ,pidControlrotZ,height)
         p1sec = rospy.Duration(0, 1000000)
         rospy.sleep(p1sec)
         #print "X: " + str(pidControlX) + "         Y:  " + str(pidControlY)
@@ -189,50 +200,60 @@ class analysefront():
         self.cv_image = -1
         self.bridge = CvBridge()
         self.timefront = rospy.get_time()
-        self.new = 0
+        self.index = 0
         self.arguments = np.array([320,180,0,0,0,self.timefront])
-        self.orb = cv2.ORB()  # Initiate SIFT detector
-        # self.bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)   # create BFMatcher object
-        FLANN_INDEX_LSH = 6
-        index_params= dict(algorithm = FLANN_INDEX_LSH,
-                   table_number = 12, # 12
-                   key_size = 12,     # 20
-                   multi_probe_level = 0) #2
-        search_params = dict(checks=200)
-        self.flann = cv2.FlannBasedMatcher(index_params,search_params)
+        self.orb = cv2.ORB(nfeatures=200,scaleFactor=1.2,nlevels=20,edgeThreshold=0,WTA_K=2,patchSize=31)
+        # self.orb = cv2.ORB()  # Initiate SIFT detector
+        self.bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)   # create BFMatcher object
+        # FLANN_INDEX_LSH = 6
+        # index_params= dict(algorithm = FLANN_INDEX_LSH,
+        #            table_number = 12, # 12
+        #            key_size = 12,     # 20
+        #            multi_probe_level = 1) #2
+        # search_params = dict(checks=200)
+        # self.flann = cv2.FlannBasedMatcher(index_params,search_params)
         # self.train = cv2.imread('/home/astrochick/Documents/projects/ardrone/Pictures/Train_check.jpg',1)          # queryImage
-        self.train = cv2.imread('/home/astrochick/Documents/projects/Train_mandalas.jpg',1)          # queryImage
+        self.train = cv2.imread('/home/deefunkt/Storage/ROS/projects/Train_mandalas1.jpg',1)          # queryImage
         self.kp1, self.des1 = self.orb.detectAndCompute(self.train,None)
+        self.orb = cv2.ORB(nfeatures=1000,scaleFactor=1.2,nlevels=20,edgeThreshold=0,WTA_K=2,patchSize=31)
 
-    def seeimage(self,ros_image):
+
+    def seeimage(self,ros_image,img_count):
         # arguments = objectim.frontcamargs
-        self.new = 1
+
 
         try:
             self.cv_image = self.bridge.imgmsg_to_cv2(ros_image,"bgr8") #rgb
-            imgcopy = self.bridge.imgmsg_to_cv2(ros_image,"bgr8")
+            # imgcopy = self.bridge.imgmsg_to_cv2(ros_image,"bgr8")
             # cv2.imshow("main",self.cv_image)
             # cv2.waitKey(1)
-            # cv2.imwrite('Train_mandalasfar.jpg',self.cv_image)
+            # cv2.imwrite('Train_mandalas1.jpg',self.cv_image)
+            img_count.index += 1
+            if img_count.index >= 10:
+                img_count.index = 0
+                self.timefront = rospy.get_time()
+                img_count.time = self.timefront
+                # find the keypoints and descriptors with SIFT
+                kp2, des2 = self.orb.detectAndCompute(self.cv_image,None)
+                if des2.__len__()>5:
 
-            self.timefront = rospy.get_time()
+                # Match descriptors.
+                    matches = self.bf.match(self.des1,des2)
+                    # matches = self.flann.knnMatch(self.des1,des2,k=1)
+                    matches = sorted(matches, key=lambda x:x.distance)
+                    good = matches[:15]
+                    # good = []
+                # for m_n in matches:
+                #     if len(m_n) != 2:
+                #         continue
+                #     (m,n) = m_n
+                #     if m.distance < 0.75*n.distance:
+                #         good.append(m)
+                #         good.append(n)
 
-            # find the keypoints and descriptors with SIFT
-            kp2, des2 = self.orb.detectAndCompute(imgcopy,None)
-
-            # Match descriptors.
-            matches = self.flann.knnMatch(self.des1,des2,k=2)
-
-            good = []
-            for m_n in matches:
-                if len(m_n) != 2:
-                    continue
-                (m,n) = m_n
-                if m.distance < 0.75*n.distance:
-                    good.append(m)
-            if good.__len__() > 10:
-                src_pts = np.float32([self.kp1[m.queryIdx].pt for m in good]).reshape(-1,1,2)
-                dst_pts = np.float32([kp2[m.trainIdx].pt for m in good]).reshape(-1,1,2)
+                    if good.__len__() >= 15:
+                        # src_pts = np.float32([self.kp1[m.queryIdx].pt for m in good]).reshape(-1,1,2)
+                        dst_pts = np.float32([kp2[m.trainIdx].pt for m in good]).reshape(-1,1,2)
 
                 # src_int = totuple(np.int32([src_pts]).reshape(-1,2))
                 # dst_int = totuple(np.int32([dst_pts]).reshape(-1,2))
@@ -280,48 +301,60 @@ class analysefront():
             # cv2.imshow("compare1",self.cv_image)
             # cv2.waitKey(1)
 
-                size = imgcopy.shape
-                bareim = np.zeros(size[:2],np.uint8)
-                index = totuple(np.int32(dst_pts).reshape(-1,2))
-                for i in index:
-                    cv2.circle(bareim,i,2,(255),2)
-                # bareim = cv2.erode(bareim, None, iterations=2)
-                # cv2.erode()
-                # cv2.erode(bareim,bareim, element=cv2.MORPH_RECT, iterations=3)
-                cv2.imshow("mask",bareim)
-                cv2.waitKey(1)
-                cnts = cv2.findContours(bareim.copy(), cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)[-2]
-                center = np.array([0,0])
-                if len(cnts) > 0:  # only proceed if at least one contour was found
-                    c = max(cnts, key=cv2.contourArea)
-                    ((x, y), radius) = cv2.minEnclosingCircle(c)
-                    if radius > 8:
-                        M = cv2.moments(c)
-                        center[0] = int(M["m10"] / M["m00"])
-                        center[1] = int(M["m01"] / M["m00"])
-                        cv2.circle(imgcopy,tuple(center),3,(255,0,0),3)
+                        size = self.cv_image.shape
+                        bareim = np.zeros(size[:2],np.uint8)
+                        index = totuple(np.int32(dst_pts).reshape(-1,2))
+                        for i in index:
+                            cv2.circle(bareim,i,7,(255),10)
+                        cv2.imshow("mask", bareim)
+                        cv2.waitKey(1)
 
-                # cv2.imshow("Window",imgcopy)
-                # cv2.waitKey(1)
-            else:
-                pass
+                        dst_vec = dst_pts.reshape(-1,2)
+                        (devx,devy) = np.std(dst_vec,0)
+
+                        # print (devx,devy)
+                        if devx < 130 and devy < 70:
+                            cnts = cv2.findContours(bareim.copy(), cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)[-2]
+                            if len(cnts) > 0:  # only proceed if at least one contour was found
+                                c = max(cnts, key=cv2.contourArea)
+                                ((x, y), radius) = cv2.minEnclosingCircle(c)
+                                if radius > 12:
+                                    M = cv2.moments(c)
+                                    img_count.center[0] = int(M["m10"] / M["m00"])
+                                    img_count.center[1] = int(M["m01"] / M["m00"])
+                                    cv2.circle(self.cv_image,tuple(img_count.center),3,(255,0,0),3)
+                                else:
+                                    img_count.center = np.array([320,180])
+                        else:
+                            img_count.center = np.array([320, 180])
+                    else:
+                        img_count.center = np.array([320, 180])
+
+                else:
+                    img_count.center = np.array([320, 180])
+
+
+            cv2.circle(self.cv_image, tuple(img_count.center), 3, (255, 0, 0), 3)
+            cv2.imshow("Window", self.cv_image)
+            cv2.waitKey(1)
+                # cv2.waitKey(3)
+                # pass
                 # cv2.imshow("Window",self.cv_image)
                 # cv2.waitKey(1)
-            h,w = Trainimg.shape
-            pts = np.float32([ [0,0],[0,h-1],[w-1,h-1],[w-1,0] ]).reshape(-1,1,2)
+            # h,w = Trainimg.shape
+            # pts = np.float32([ [0,0],[0,h-1],[w-1,h-1],[w-1,0] ]).reshape(-1,1,2)
             # centre = np.float32([ h/2,w/2 ]).reshape(-1,1,2)
             # ptstup = totuple(pts)
             # center = np.float32([h/2,w/2]).reshape(1,1,2)
 
-            dst = cv2.perspectiveTransform(pts,M)
+            # dst = cv2.perspectiveTransform(pts,M)
             # dstint = np.int32(dst)
             # edges = dst.reshape(-1,2)
-            cv2.polylines(imgcopy,np.int32(dst),True,(0,0,255),3,cv2.CV_AA)
+            # cv2.polylines(imgcopy,np.int32(dst),True,(0,0,255),3,cv2.CV_AA)
             # centerim = totuple(dst.reshape(2))
             # cv2.circle(imgcopy,centerim,2,(0,0,255),3)
 
-            cv2.imshow("Window",imgcopy)
-            cv2.waitKey(3)
+
 
 
             # Draw first 10 matches.
@@ -531,6 +564,12 @@ class twistMatrix:
         print "vectorXYdrone is :" + str(vectorXYdrone)
         return vectorXYdrone
 
+class indexclass():
+    def __init__(self):
+        self.index = 0
+        self.center = np.array([500,500])
+        self.time = 0
+
 if __name__ == '__main__':
     this = initdrone()
     me = BasicDroneController()  # should automatically call GetNavdata when something in received in subscriber
@@ -540,8 +579,8 @@ if __name__ == '__main__':
     # centerblue = np.array([-1,-1])
     # radiusblue = -1
     # circle = np.array([-1,-1])
-
-    image_sub = rospy.Subscriber("/ardrone/image_raw", Image, frontcam.seeimage)
+    img_count = indexclass()
+    image_sub = rospy.Subscriber("/ardrone/image_raw", Image, frontcam.seeimage,img_count)
 
     # image_sub = rospy.Subscriber("/ardrone/image_raw", Image, seeimage, me.marker)
 
@@ -581,33 +620,36 @@ if __name__ == '__main__':
     integratedError = np.zeros([100,2])
     integratorCounter = 0
     myTime = rospy.get_time()
-    errorFile = open('logErrorskdxy.txt', 'a')
-    timeFile = open('logTimesdkdxy.txt', 'a')
+    # errorFile = open('logErrorskdxy.txt', 'a')
+    # timeFile = open('logTimesdkdxy.txt', 'a')
     print "GET TO THE CHOPPAAAA!!!!"
     while 1:
         sinceMarker = (rospy.get_time() - myTime)
         try:
-            if frontcam.cv_image is not -1:
-                 # seeimageargs.frontcamargs = processimage(frontcam.cv_image,frontcam.timefront)
-                 horObPos = seeimageargs.frontcamargs[0:2]
-                 horObTime = seeimageargs.frontcamargs[5]
+            # img_count.index += 1
+            if img_count.index >= 9:
+                # img_count.index = 0
+                # seeimageargs.frontcamargs = processimage(frontcam.cv_image,frontcam.timefront)
+                # print horObPos
+                horObTime = img_count.time
             if (me.markercount == 1):
+                horObPos = img_count.center
                 timeNowcheck = getattr(me.marker,'time')
                 if (timeNowcheck != timeNow):
                     timeNow = getattr(me.marker, 'time')
                     myTime = rospy.get_time()
                     posNow = getattr(me.marker, 'cvec') # [x, y]
-                    if (450 < posNow[0] < 550):
+                    if (425 < posNow[0] < 575):
                         posNow[0] = 500
-                    if (450 < posNow[1] < 550):
+                    if (425 < posNow[1] < 575):
                         posNow[1] = 500
                     distNow = getattr(me.marker, 'dist')
                     if integratorCounter == 100:
                         integratorCounter = 0
                     integratedTime[integratorCounter] = timeNow - previousMarkerObject[1] # the dt
                     integratedError[integratorCounter] = np.array([500, 500]) - posNow # the dr, [dx, dy]
-                    errorFile.write(str(integratedError[integratorCounter]) + '\n')
-                    timeFile.write(str(myTime) + '\n')
+                    # errorFile.write(str(integratedError[integratorCounter]) + '\n')
+                    # timeFile.write(str(myTime) + '\n')
                     integratorCounter += 1
                     totalIntegratedError =np.dot(integratedTime, integratedError)
                     thisfunction = followImage(posNow, distNow,timeNow,
@@ -630,9 +672,9 @@ if __name__ == '__main__':
                 #print " Marker Lost.........X: " + str(previousMarkerObject[4]) + "      Y: " + str(previousMarkerObject[5])
                 pubCmd.publish(cmd)
                 #rospy.sleep(rospy.Duration(1))
-            elif sinceMarker > 20:
-                 errorFile.close()
-                 timeFile.close()
+            # elif sinceMarker > 20:
+            #      errorFile.close()
+            #      timeFile.close()
 
             else:
                 control.hoverNoAuto()
