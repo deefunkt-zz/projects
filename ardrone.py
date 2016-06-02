@@ -14,23 +14,6 @@ import matplotlib.pyplot as plt
 from ardrone_autonomy.msg import Navdata
 
 
-# abc = 0
-# plt.figure(1)
-# plt.subplot(211)
-# plt.scatter(abc,abc)
-# plt.ylim([-500, 500])
-# plt.subplot(212)
-# plt.scatter(abc+1,abc+1)
-# plt.ylim([-500, 500])
-# plt.ion()
-# plt.show()
-# while 1:
-#     plt.subplot(211)
-#     plt.scatter(abc,abc)
-#     plt.subplot(212)
-#     plt.scatter(abc*2,abc*2)
-#     plt.draw()
-#     abc += 1
 
 #
 # done. track marker over multiple images
@@ -47,20 +30,8 @@ roundel_alpha = 0.5051   # in rad = 28.94 degrees (long)
 roundel_beta = math.pi - 0.7736  # in rad = 180- 44.32 degrees (short)
 r2d = 180/math.pi
 d2r = math.pi/180
-# dark
-# blueLower = (53, 21, 16)  # BGR
-# blueUpper = (100,51,43)
-# light
-# blueLower = (210,30,50)  # HSV
-# blueUpper = (240, 80, 100)
-# blueLower = (110,100,50)
-# blueUpper = (125,220,150)  # BGR of HSV file
 blueLower = np.array([110,50,50])
 blueUpper = np.array([125,225,255])  # BGR of HSV file
-
-# purple
-# blueLower = np.array([200,50,20])
-# blueUpper = np.array([230,250,250])
 
 # plt.figure(1)
 # plt.subplot(211)
@@ -89,10 +60,6 @@ class BasicDroneController(object):
         self.marker_dis = -1
         self.marker = createmarker()    # classes
 
-
-        # # subscriber to the navdata, when a message is received call the fn self.GetNavdata
-        # self.subNavdata = rospy.Subscriber("/ardrone/navdata",dronemsgs.Navdata,self.GetNavdata)  # can it call outside the class?
-        # self.pubReset = rospy.Publisher("/ardrone/reset",stMsg.Empty,queue_size=3)
 
     # retrive and store data??
     def GetNavdata(self,data):
@@ -155,8 +122,7 @@ def drawmarker(rows,cols,marker):
 
 
 # takes in [x, y] coordinates of marker, and executes a moveForward or moveBack based on error in position
-def followImage(marker, width, time,horobpos, horobtime, prevparam, totalintegratedError):
-
+def followImage(marker, height, time,horobpos, horobtime, prevparam, integratedError):
     previouspos = prevparam[0]
     previoustime = prevparam[1]
     prevhorobpos = prevparam[2]
@@ -166,15 +132,14 @@ def followImage(marker, width, time,horobpos, horobtime, prevparam, totalintegra
     center = np.array([500., 500.])
     kp = 1/8000.
     kd = 0.00075
-    ki = 1./2000
-
+    # kd = 0
+    ki = 1/9000000000. ## should be 10-6 * length of time over which error is accumulated (1/ (6 x 10_9))
+    rotZ = 0
     kp_z = 1./500
-    kp_yaw = 1./1500
     kd_z = 0.0
-
+    pidControlX = 0.
+    pidControlY = 0.
     errorInZPos = float(180-horobpos[1])
-    errorInYaw = float(320-horobpos[0])
-    # print (horobpos[0],horobpos[1])
     errorInXPos = float((500 - marker[1]))  # since the errors in camera image and drone reference are inverted, we use
     errorInYPos = float((500 - marker[0]))  # the opposite vector elements in marker[]
     # plt.figure(1)
@@ -197,21 +162,20 @@ def followImage(marker, width, time,horobpos, horobtime, prevparam, totalintegra
             derror = [0., 0.]
     # if math.isnan(derrorZ[0]):
     #     derrorZ =0
-        pidControlX = float(kp*errorInXPos + kd*derror[1] + ki*totalintegratedError[1])
-        pidControlY = float(kp*errorInYPos + kd*derror[0] + ki*totalintegratedError[0])
+        pidControlX = float(kp*errorInXPos + kd*derror[1] + ki*integratedError[1])
+        pidControlY = float(kp*errorInYPos + kd*derror[0] + ki*integratedError[0])
         # pdControlZ = float(kp_z*errorInZPos +kd_z*derrorZ[1])
         pdControlZ = float(kp_z*errorInZPos)
-        # pdcontrolYaw = float(kp_yaw*errorInYaw)
-        print "move in x: " + str(pidControlX) + "\nmove in y: " + str(pidControlY) + "\nmove in z: " + str(pdControlZ) + "\nyaw: "
-        # print "move in z: " + str(pdControlZ)
         # print "Our height is; " + str(height)
         # print "The change in Time: " + str(dt)
-        p1sec = rospy.Duration(0, 1000)
+        p1sec = rospy.Duration(0, 10000)
         rospy.sleep(p1sec)
-        # control.moveXYZyaw(pidControlX, pidControlY, pdControlZ,0, width)
-        control.moveXYZ(pidControlX, pidControlY, pdControlZ, width)
-        print "\nwidth is: " + str(width)
-    return np.array([marker, time,horobpos,horobtime]) # return current values to use as previous values
+        # if ((errorInYPos < 50) and (errorInXPos < 50) and (pidControlX < 0.02) and (pidControlY < 0.02)):     #used to test rotation while hovering over roundel
+        #     rotZ = 0.3
+        #     print "rotate"
+        control.moveXYZ(pidControlX, pidControlY, pdControlZ,rotZ,height)
+        print "X: " + str(pidControlX) + "         Y:  " + str(pidControlY)
+    return np.array([marker, time,horobpos,horobtime,pidControlX,pidControlY]) # return current values to use as previous values
 
 
 class analysefront():
@@ -368,23 +332,7 @@ class twistMatrix:
     def __init__(self, movePublisher):
         self.movePub = movePublisher
 
-    def moveXYZ(self, x, y, z, width):
-        cmd = Twist()
-        cmd.linear.x = x
-        cmd.linear.y = y
-
-        if (width < 100):
-             cmd.linear.z = 0.1
-        elif (width > 180):
-            cmd.linear.z = -0.1
-        else:
-            cmd.linear.z = z
-        cmd.angular.x = 0
-        cmd.angular.y = 0
-        cmd.angular.z = 0
-        self.movePub.publish(cmd)
-
-    def moveXYZyaw(self, x, y, z, yaw, width):
+    def moveXYZ(self, x, y, z, rotation, height):
         cmd = Twist()
         cmd.linear.x = x
         cmd.linear.y = y
@@ -392,11 +340,11 @@ class twistMatrix:
 
         cmd.angular.x = 0
         cmd.angular.y = 0
-        cmd.angular.z = yaw
+        cmd.angular.z = rotation
 
-        if (width > 150):
-             cmd.linear.z = 0.1
-        elif (width < 50):
+        if (height < 140):
+             cmd.linear.z = 0.25
+        elif (height > 200):
             cmd.linear.z = -0.2
         self.movePub.publish(cmd)
 
@@ -526,6 +474,10 @@ if __name__ == '__main__':
     me = BasicDroneController()  # should automatically call GetNavdata when something in received in subscriber
     subNavdata = rospy.Subscriber('/ardrone/navdata', dronemsgs.Navdata, me.GetNavdata)
     frontcam = analysefront()
+    # seeimageargs = classargs()
+    # centerblue = np.array([-1,-1])
+    # radiusblue = -1
+    # circle = np.array([-1,-1])
 
     image_sub = rospy.Subscriber("/ardrone/image_raw", Image, frontcam.seeimage)
 
@@ -544,49 +496,73 @@ if __name__ == '__main__':
     # pubTakeoff.publish(EmptyMessage)
     control = twistMatrix(pubCmd)
 
-    # stabilize after Launch,
-    rospy.sleep(rospy.Duration(1))
-    control.hoverNoAuto()
-    rospy.sleep(rospy.Duration(3))
-    control.moveXYZ(0,0,0.4,50) # increase hover height to widen field of view
-    rospy.sleep(rospy.Duration(1))
+    # # stabilize after Launch,
+    # rospy.sleep(rospy.Duration(1))
+    # control.hoverNoAuto()
+    # rospy.sleep(rospy.Duration(3))
+    # control.moveXYZ(0,0,0.1,0,160) # increase hover height to widen field of view
+    # rospy.sleep(rospy.Duration(1))
 
     # while not rospy.is_shutdown():
     horObPos = np.array([320,180])
     horObTime = rospy.get_time()
     previousMarker = np.array([500, 500])
+    posNow = previousMarker
     prevTime = getattr(me.marker, 'time')
+    timeNow = prevTime
+    distNow = 150.
     prevHorTime = rospy.get_time()
     prevHorOb = np.array([320,180])
-    previousMarkerObject = np.array([previousMarker, prevTime, prevHorOb, prevHorTime])
-    integratedTime = np.zeros(20)
-    integratedError = np.zeros([20,2])
+    previousMarkerObject = np.array([previousMarker, prevTime, prevHorOb, prevHorTime,0.,0.])
+    thisfunction = previousMarkerObject
+    integratedTime = np.zeros(200)
+    integratedError = np.zeros([200,2])
     integratorCounter = 0
-    print "lets roollll"
+    myTime = rospy.get_time()
+    errorFile = open('logErrors4delay10kKI19.txt', 'a')
+    timeFile = open('logTimes4delay10kKI19.txt', 'a')
+    print "GET TO THE CHOPPAAAA!!!!"
     while 1:
+        sinceMarker = (rospy.get_time() - myTime)
         try:
-            if frontcam.new is 1:
-                # (seeimageargs.frontcamargs,frontcam.new) = processimage(frontcam.cv_image,frontcam.timefront)
-                horObPos = frontcam.arguments[0:2]
-                horObTime = frontcam.arguments[5]
-
-                # print 'processed image' + str(frontcamargs)
-
+            if frontcam.cv_image is not -1:
+                 # seeimageargs.frontcamargs = processimage(frontcam.cv_image,frontcam.timefront)
+                 horObPos = frontcam.arguments[0:2]
+                 horObTime = frontcam.arguments[5]
             if me.markercount is 1:
                 timeNow = getattr(me.marker, 'time')
+                myTime = rospy.get_time()
                 posNow = getattr(me.marker, 'cvec') # [x, y]
                 distNow = getattr(me.marker, 'dist')
-                if integratorCounter == 20:
+                if integratorCounter == 200:
                     integratorCounter = 0
                 integratedTime[integratorCounter] = timeNow - previousMarkerObject[1] # the dt
-                integratedError[integratorCounter] = posNow - previousMarkerObject[0] # the dr, [dx, dy]
+                integratedError[integratorCounter] = np.array([500, 500]) - posNow # the dr, [dx, dy]
+                errorFile.write(str(integratedError[integratorCounter]) + '\n')
+                timeFile.write(str(myTime) + '\n')
                 integratorCounter += 1
                 totalIntegratedError =np.dot(integratedTime, integratedError)
                 thisfunction = followImage(posNow, distNow,timeNow,
                                            horObPos, horObTime, previousMarkerObject, totalIntegratedError)
-                # mycounter += 1
                 previousMarkerObject = thisfunction
-                # rospy.spin()
+
+            #IF the drone loses the marker, keep the previous movement command for 1 sec in attempt
+            # to re-acquire. if 1 sec passed, skip this block and hover
+            elif (sinceMarker < math.pow(10, 1)):
+                cmd = Twist()
+                cmd.linear.z = 0
+                cmd.linear.x = previousMarkerObject[4]
+                cmd.linear.y = previousMarkerObject[5]
+                cmd.angular.x = 0
+                cmd.angular.y = 0
+                cmd.angular.z = 0
+                print " Marker Lost.........X: " + str(previousMarkerObject[4]) + "      Y: " + str(previousMarkerObject[5])
+                pubCmd.publish(cmd)
+                # rospy.sleep(rospy.Duration(1))
+            elif sinceMarker > 20:
+                errorFile.close()
+                timeFile.close()
+
             else:
                 control.hoverNoAuto()
         except Exception as e:
