@@ -17,8 +17,8 @@ bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
 # train = cv2.imread('/home/astrochick/Documents/projects/Train1_Lyd.jpg',1)          # queryImage
 # imgcopy = cv2.imread('/home/astrochick/Documents/projects/Lyd1.jpg',1) # trainImage
 # imgcopy2 = cv2.imread('/home/astrochick/Documents/projects/Lyd1.jpg',1)
-train = cv2.imread('/home/astrochick/Documents/projects/ardrone/Pictures/Train_check.jpg',1)          # queryImage
-imgcopy = cv2.imread('/home/astrochick/Documents/projects/ardrone/Pictures/check1.jpg',1) # trainImage
+train = cv2.imread('/home/astrochick/Documents/projects/Train_mandalasfar.jpg',1)          # queryImage
+imgcopy = cv2.imread('/home/astrochick/Documents/projects/Train_mandalas.jpg',1) # trainImage
 # imgcopy2 = cv2.imread('/home/astrochick/Documents/projects/Lyd1.jpg',1)
 
 # img1cv = Bridge.imgmsg_to_cv2(img1ros,"bgr8")
@@ -43,15 +43,15 @@ index_params= dict(algorithm = FLANN_INDEX_LSH,
                    multi_probe_level = 1) #2
 search_params = dict(checks=50)
 flann = cv2.FlannBasedMatcher(index_params,search_params)
-matches = flann.knnMatch(des1,des2,k=2)
+good = flann.knnMatch(des1,des2,k=4)
 # matchesMask = [[0,0] for i in xrange(len(matches))]
-good = []
-for m_n in matches:
-    if len(m_n) != 2:
-        continue
-    (m,n) = m_n
-    if m.distance < 0.75*n.distance:
-        good.append(m)
+# good = []
+# for m_n in matches:
+#     if len(m_n) != 2:
+#         continue
+#     (m,n) = m_n
+#     if m.distance < 0.75*n.distance:
+#         good.append(m)
 
 # Apply ratio test
 # good = []
@@ -59,13 +59,22 @@ for m_n in matches:
 #     if m.distance < 0.75*n.distance:
 #         good.append(m)
 # sets = matches[:50]
-src_pts = np.float32([ kp1[m.queryIdx].pt for m in good]).reshape(-1,1,2)
-dst_pts = np.float32([ kp2[m.trainIdx].pt for m in good]).reshape(-1,1,2)
+src_pts = np.float32([ kp1[m[0].queryIdx].pt for m in good]).reshape(-1,1,2)
+src_pts2 = np.float32([ kp1[m[1].queryIdx].pt for m in good]).reshape(-1,1,2)
+dst_pts = np.float32([ kp2[m[0].trainIdx].pt for m in good]).reshape(-1,1,2)
+dst_pts2 = np.float32([ kp2[m[1].trainIdx].pt for m in good]).reshape(-1,1,2)
+
 size = imgcopy.shape
 bareim = np.zeros(size[:2],np.uint8)
 index = totuple(np.int32(dst_pts).reshape(-1,2))
 for i in index:
     cv2.circle(bareim,i,5,(255),5)
+index = totuple(np.int32(dst_pts2).reshape(-1,2))
+for i in index:
+    cv2.circle(bareim,i,5,(150),5)
+
+cv2.imshow("mask",bareim)
+cv2.waitKey(3000)
 bareim = cv2.erode(bareim, None, iterations=2)
 bareim = cv2.dilate(bareim, None, iterations=2)
 cnts = cv2.findContours(bareim.copy(), cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)[-2]
@@ -86,19 +95,19 @@ cv2.waitKey(2000)
 
 
 
-# M,mask = cv2.findHomography(src_pts, dst_pts, 0)
+
 # matchesMask = mask.ravel().tolist()
 
 src_int = totuple(np.int32([src_pts]).reshape(-1,2))
 dst_int = totuple(np.int32([dst_pts]).reshape(-1,2))
 for i in dst_int:
     cv2.circle(imgcopy,i,2,(255,0,0),-1)
-    cv2.imshow("compare",imgcopy)
-    cv2.waitKey(1000)
+    # cv2.imshow("compare",imgcopy)
+    # cv2.waitKey(1000)
 for i in src_int:
     cv2.circle(train,i,2,(255,0,0),-1)
     # cv2.imshow("compare1",train)
-    # cv2.waitKey(1000)
+    # cv2.waitKey(500)
 
 # cv2.circle(imgcopy,points[6],3,(0,0,255),2)
 # cv2.imshow("compare",imgcopy)
@@ -115,7 +124,7 @@ for i in src_int:
 # cv2.waitKey(3000)
 
 
-
+M,mask = cv2.findHomography(src_pts, dst_pts, 0)
 
 h,w,d = train.shape
 pts = np.float32([ [0,0],[w-1,0],[w-1,h-1],[0,h-1] ]).reshape(1,-1,2)
