@@ -33,11 +33,6 @@ d2r = math.pi/180
 blueLower = np.array([110,50,50])
 blueUpper = np.array([125,225,255])  # BGR of HSV file
 
-# plt.figure(1)
-# plt.subplot(211)
-# plt.subplot(212)
-# plt.ion()
-# plt.show()
 
 
 def initdrone():
@@ -134,10 +129,10 @@ def followImage(marker, height, time,horobpos, horobtime, prevparam, integratedE
     kpy = 1/9000.
     kdx = 0.00045
     kdy = 0.00080
-    # kd = 0
     kix = 1/48000000000. ## should be 10-6 * length of time over which error is accumulated (1/ (6 x 10_9))
     kiy = 1/27000000000.
     pidControlrotZ = 0.
+    pdControlZ = 0.
     kp_z = 1./500
     kd_z = 0.0
     kp_Rot = 1./500
@@ -149,36 +144,23 @@ def followImage(marker, height, time,horobpos, horobtime, prevparam, integratedE
     errorInXPos = float((500 - marker[1]))  # since the errors in camera image and drone reference are inverted, we use
     errorInYPos = float((500 - marker[0]))  # the opposite vector elements in marker[]
 
-    # plt.figure(1)
-    # plt.subplot(211)
-    # plt.scatter(counter,errorInXPos)
-    # plt.ylim([-500, 500])
-    # plt.subplot(212)
-    # plt.scatter(counter, errorInYPos)
-    # plt.ylim([-500, 500])
-    # plt.draw()
 
-    # dtZ = (horobtime - prevhorobtime)
     dt = (time - previoustime)
     if dt > 0:
         # errorNow - prevError divided by the time
         derror = (previouspos - marker)/dt
-        # derrorZ = (prevhorobpos-horobpos)/dtZ
 
         if math.isnan(derror[0]):
             derror = [0., 0.]
-    # if math.isnan(derrorZ[0]):
-    #     derrorZ =0
         pidControlX = float(kpx*errorInXPos + kdx*derror[1] + kix*integratedError[1])
         if (abs(errorInXPos) <= 50):
             pidControlX = 0.
         pidControlY = float(kpy*errorInYPos + kdy*derror[0] + kiy*integratedError[0])
         if (abs(errorInYPos) <= 50):
             pidControlY = 0.
-        # pdControlZ = float(kp_z*errorInZPos +kd_z*derrorZ[1])
         pdControlZ = float(kp_z*errorInZPos)
-        if (abs(pdControlZ) > 0.01):
-            print pdControlZ
+        # if (abs(pdControlZ) > 0.01):
+        #     print pdControlZ
         # pidControlrotZ = float(kp_Rot*errorInZRot)
         # print "Our height is; " + str(height)
         # print "The change in Time: " + str(dt)
@@ -188,11 +170,11 @@ def followImage(marker, height, time,horobpos, horobtime, prevparam, integratedE
         control.moveXYZ(pidControlX, pidControlY, pdControlZ,pidControlrotZ,height)
         p1sec = rospy.Duration(0, 1000000)
         rospy.sleep(p1sec)
-        #print "X: " + str(pidControlX) + "         Y:  " + str(pidControlY)
+        print "X: " + str(pidControlX) + "         Y:  " + str(pidControlY)
         # if (pidControlX > 0.1 or pidControlY > 0.1):
-            # print "XK: " + str(kp*errorInXPos) + " XD: " + str(kd*derror[1]) +" XI: " + str(ki*integratedError[1])
-            # print "YK: " + str(kp * errorInYPos) + " YD: " + str(kd * derror[0]) + " YI: " + str(ki * integratedError[0])
-    return np.array([marker, time,horobpos,horobtime,pidControlX,pidControlY]) # return current values to use as previous values
+        #     print "XK: " + str(kp*errorInXPos) + " XD: " + str(kd*derror[1]) +" XI: " + str(ki*integratedError[1])
+        #     print "YK: " + str(kp * errorInYPos) + " YD: " + str(kd * derror[0]) + " YI: " + str(ki * integratedError[0])
+        return np.array([marker, time,horobpos,horobtime,pidControlX,pidControlY]) # return current values to use as previous values
 
 
 class analysefront():
@@ -235,7 +217,7 @@ class analysefront():
                 img_count.time = self.timefront
                 # find the keypoints and descriptors with SIFT
                 kp2, des2 = self.orb.detectAndCompute(self.cv_image,None)
-                if des2.__len__()>5:
+                if kp2.__len__()>5:
 
                 # Match descriptors.
                     matches = self.bf.match(self.des1,des2)
@@ -306,8 +288,8 @@ class analysefront():
                         index = totuple(np.int32(dst_pts).reshape(-1,2))
                         for i in index:
                             cv2.circle(bareim,i,7,(255),10)
-                        cv2.imshow("mask", bareim)
-                        cv2.waitKey(1)
+                        # cv2.imshow("mask", bareim)
+                        # cv2.waitKey(1)
 
                         dst_vec = dst_pts.reshape(-1,2)
                         (devx,devy) = np.std(dst_vec,0)
@@ -336,6 +318,7 @@ class analysefront():
 
             cv2.circle(self.cv_image, tuple(img_count.center), 3, (255, 0, 0), 3)
             cv2.imshow("Window", self.cv_image)
+            cv2.imwrite('TrackSave.jpg',self.cv_image)
             cv2.waitKey(1)
                 # cv2.waitKey(3)
                 # pass
@@ -605,7 +588,7 @@ if __name__ == '__main__':
     # rospy.sleep(rospy.Duration(1))
 
     # while not rospy.is_shutdown():
-    horObPos = np.array([320,180])
+    horObPos = np.array([320, 180])
     horObTime = rospy.get_time()
     previousMarker = np.array([500, 500])
     posNow = previousMarker
@@ -627,13 +610,14 @@ if __name__ == '__main__':
         sinceMarker = (rospy.get_time() - myTime)
         try:
             # img_count.index += 1
-            if img_count.index >= 9:
-                # img_count.index = 0
-                # seeimageargs.frontcamargs = processimage(frontcam.cv_image,frontcam.timefront)
-                # print horObPos
-                horObTime = img_count.time
+
+            horObPos = img_count.center
+            # if img_count.index >= 8:
+            #     # img_count.index = 0
+            #     # seeimageargs.frontcamargs = processimage(frontcam.cv_image,frontcam.timefront)
+            #     # print horObPos
+            #     horObTime = img_count.time
             if (me.markercount == 1):
-                horObPos = img_count.center
                 timeNowcheck = getattr(me.marker,'time')
                 if (timeNowcheck != timeNow):
                     timeNow = getattr(me.marker, 'time')

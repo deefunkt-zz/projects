@@ -1,8 +1,8 @@
 clear;
 close all;
 tic
-errorfile = fopen('./logErrorskdxy.txt','r');
-timefile = fopen('./logTimesdkdxy.txt','r');
+errorfile = fopen('./logErrorsdelay1MKI12.txt','r');
+timefile = fopen('./logTimesdelay1MKI12.txt','r');
 actualErrors = [0, 0];
 errors = textscan(errorfile,'%s','Delimiter',']/n[');
 times  = textscan(timefile,'%f','Delimiter','/n');
